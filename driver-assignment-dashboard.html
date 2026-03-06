@@ -1,0 +1,156 @@
+<div id="dad-root">
+  <!-- Header -->
+  <div id="dad-header">
+    <div id="dad-header-content">
+      <div id="dad-header-left">
+        <svg id="dad-logo" viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="white" stroke-width="2">
+          <rect x="3" y="7" width="18" height="11" rx="2"/>
+          <circle cx="7.5" cy="18" r="1.5"/>
+          <circle cx="16.5" cy="18" r="1.5"/>
+          <path d="M5 7V5a2 2 0 012-2h10a2 2 0 012 2v2"/>
+          <path d="M9 11h6"/>
+        </svg>
+        <div>
+          <h1 id="dad-title">Driver Assignment Dashboard</h1>
+          <p id="dad-subtitle">Real-time driver-vehicle assignment tracking</p>
+        </div>
+      </div>
+      <div id="dad-header-right">
+        <span id="dad-last-refresh">Last refreshed: —</span>
+        <button id="dad-refresh-btn" title="Refresh data">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="23 4 23 10 17 10"/>
+            <path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/>
+          </svg>
+          Refresh
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Controls Bar -->
+  <div id="dad-controls">
+    <div id="dad-search-wrap">
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="11" cy="11" r="8"/>
+        <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+      </svg>
+      <input type="text" id="dad-search" placeholder="Search drivers..." autocomplete="off"/>
+    </div>
+    <div id="dad-filter-wrap">
+      <label for="dad-group-filter">Group:</label>
+      <select id="dad-group-filter">
+        <option value="">All Groups</option>
+      </select>
+    </div>
+    <div id="dad-stats">
+      <span id="dad-stat-total" class="dad-stat-pill">Total: <strong>0</strong></span>
+      <span id="dad-stat-assigned" class="dad-stat-pill dad-stat-assigned">Assigned: <strong>0</strong></span>
+      <span id="dad-stat-unassigned" class="dad-stat-pill dad-stat-unassigned">Unassigned: <strong>0</strong></span>
+    </div>
+  </div>
+
+  <!-- Action Bar (hidden until selection) -->
+  <div id="dad-action-bar" class="dad-hidden">
+    <span id="dad-selected-count">0 selected</span>
+    <div id="dad-action-buttons">
+      <button id="dad-btn-email" class="dad-action-btn dad-btn-email" title="Email notification">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/>
+          <polyline points="22,6 12,13 2,6"/>
+        </svg>
+        Email
+      </button>
+      <button id="dad-btn-export" class="dad-action-btn dad-btn-export" title="Export CSV">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
+          <polyline points="7 10 12 15 17 10"/>
+          <line x1="12" y1="15" x2="12" y2="3"/>
+        </svg>
+        Export CSV
+      </button>
+      <button id="dad-btn-clear" class="dad-action-btn dad-btn-clear" title="Clear selection">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+          <line x1="18" y1="6" x2="6" y2="18"/>
+          <line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+        Clear
+      </button>
+    </div>
+  </div>
+
+  <!-- Loading Indicator -->
+  <div id="dad-loading" class="dad-hidden">
+    <div class="dad-spinner"></div>
+    <span>Loading driver data...</span>
+  </div>
+
+  <!-- Error Banner -->
+  <div id="dad-error" class="dad-hidden"></div>
+
+  <!-- Table -->
+  <div id="dad-table-wrap">
+    <table id="dad-table">
+      <thead>
+        <tr>
+          <th class="dad-th-check"><input type="checkbox" id="dad-select-all" title="Select all"/></th>
+          <th class="dad-sortable" data-sort="name">Driver Name <span class="dad-sort-icon"></span></th>
+          <th class="dad-sortable" data-sort="vehicle">Current Vehicle <span class="dad-sort-icon"></span></th>
+          <th class="dad-sortable" data-sort="assignedSince">Assigned Since <span class="dad-sort-icon"></span></th>
+          <th class="dad-sortable" data-sort="unassignedAt">Unassigned At <span class="dad-sort-icon"></span></th>
+          <th class="dad-sortable" data-sort="status">Status <span class="dad-sort-icon"></span></th>
+        </tr>
+      </thead>
+      <tbody id="dad-tbody"></tbody>
+    </table>
+    <div id="dad-no-results" class="dad-hidden">No drivers match your search criteria.</div>
+  </div>
+
+  <!-- Timeline Panel (slide-in from right) -->
+  <div id="dad-timeline-overlay" class="dad-hidden">
+    <div id="dad-timeline-panel">
+      <div id="dad-timeline-header">
+        <h2 id="dad-timeline-title">Driver Timeline</h2>
+        <button id="dad-timeline-close" title="Close timeline">&times;</button>
+      </div>
+      <div id="dad-timeline-controls">
+        <label>From: <input type="date" id="dad-timeline-from"/></label>
+        <label>To: <input type="date" id="dad-timeline-to"/></label>
+        <button id="dad-timeline-apply">Apply</button>
+      </div>
+      <div id="dad-timeline-loading" class="dad-hidden">
+        <div class="dad-spinner dad-spinner-sm"></div>
+        <span>Loading timeline...</span>
+      </div>
+      <div id="dad-timeline-body"></div>
+    </div>
+  </div>
+
+  <!-- Email Modal -->
+  <div id="dad-email-modal" class="dad-hidden">
+    <div id="dad-email-dialog">
+      <div id="dad-email-header">
+        <h3>Email Notification</h3>
+        <button id="dad-email-close" title="Close">&times;</button>
+      </div>
+      <div id="dad-email-body">
+        <div class="dad-form-group">
+          <label for="dad-email-to">To:</label>
+          <input type="email" id="dad-email-to" placeholder="recipient@example.com"/>
+        </div>
+        <div class="dad-form-group">
+          <label for="dad-email-subject">Subject:</label>
+          <input type="text" id="dad-email-subject" readonly/>
+        </div>
+        <div class="dad-form-group">
+          <label for="dad-email-content">Body:</label>
+          <textarea id="dad-email-content" rows="10" readonly></textarea>
+        </div>
+      </div>
+      <div id="dad-email-footer">
+        <button id="dad-email-send" class="dad-action-btn dad-btn-email">Open in Email Client</button>
+        <button id="dad-email-cancel" class="dad-action-btn dad-btn-clear">Cancel</button>
+      </div>
+    </div>
+  </div>
+</div>
