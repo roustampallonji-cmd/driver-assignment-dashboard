@@ -3,12 +3,11 @@
 #
 # Prerequisites:
 #   1. gcloud CLI installed and authenticated
-#   2. GCP project selected: gcloud config set project YOUR_PROJECT
-#   3. APIs enabled: Cloud Functions, Cloud Scheduler, Firestore, Secret Manager
+#   2. GCP project: geotab-soleng-test (or set GCP_PROJECT env var)
+#   3. APIs enabled: Cloud Functions, Cloud Scheduler, Secret Manager
 #   4. Secrets created:
-#      gcloud secrets create mygeotab-service-account --data-file=- <<< '{"server":"my.geotab.com","database":"roustampallonji_07","userName":"...","password":"..."}'
-#      gcloud secrets create gmail-smtp-credentials --data-file=- <<< '{"user":"your@gmail.com","appPassword":"xxxx xxxx xxxx xxxx"}'
-#   5. Firestore database created (Native mode)
+#      echo '{"server":"my.geotab.com","database":"roustampallonji_07","userName":"...","password":"..."}' | gcloud secrets create mygeotab-service-account --data-file=-
+#      echo '{"user":"your@gmail.com","appPassword":"xxxx xxxx xxxx xxxx"}' | gcloud secrets create gmail-smtp-credentials --data-file=-
 
 set -euo pipefail
 

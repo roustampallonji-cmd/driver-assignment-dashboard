@@ -1,34 +1,23 @@
 'use strict';
 
-const { Firestore } = require('@google-cloud/firestore');
-const { SecretManagerServiceClient } = require('@google-cloud/secret-manager');
-const nodemailer = require('nodemailer');
+const sgMail = require('@sendgrid/mail');
 const https = require('https');
 
 // ── Constants ──
-const ADDIN_GUID = '0b12e5f9-b943-4a76-b09d-59fe896bb1b6';
+const ADDIN_GUID = 'aECbVRyP_h0SwqL4l2-B5EQ';
 const RULE_TYPE = 'driverAssignmentNotification';
-const FIRESTORE_COLLECTION = 'driverAssignmentNotifier';
-const FIRESTORE_DOC = 'feedState';
+const FEED_STATE_TYPE = 'driverAssignmentFeedState';
 
-const firestore = new Firestore();
-const secretClient = new SecretManagerServiceClient();
-
-// ── Secret Manager ──
-async function getSecret(name) {
-  const projectId = process.env.GCP_PROJECT || process.env.GCLOUD_PROJECT;
-  const [version] = await secretClient.accessSecretVersion({
-    name: `projects/${projectId}/secrets/${name}/versions/latest`
-  });
-  return version.payload.data.toString('utf8');
-}
-
-async function loadSecrets() {
-  const mygRaw = await getSecret('mygeotab-service-account');
-  const gmailRaw = await getSecret('gmail-smtp-credentials');
+// ── Config from Environment Variables ──
+function loadSecrets() {
   return {
-    mygeotab: JSON.parse(mygRaw),
-    gmail: JSON.parse(gmailRaw)
+    mygeotab: {
+      server: process.env.MYG_SERVER || 'my.geotab.com',
+      database: process.env.MYG_DATABASE,
+      userName: process.env.MYG_USERNAME,
+      password: process.env.MYG_PASSWORD
+    },
+    sendgridApiKey: process.env.SENDGRID_API_KEY
   };
 }
 
@@ -81,7 +70,8 @@ async function authenticateMyGeotab(creds) {
     database: creds.database
   });
 
-  const server = result.path || creds.server || 'my.geotab.com';
+  const path = result.path;
+  const server = (path && path !== 'ThisServer') ? path : (creds.server || 'my.geotab.com');
   const sessionId = result.credentials.sessionId;
   const database = result.credentials.database;
   const userName = result.credentials.userName;
@@ -95,24 +85,38 @@ async function authenticateMyGeotab(creds) {
   };
 }
 
-// ── Firestore Feed State ──
-async function loadFeedState() {
-  const doc = await firestore
-    .collection(FIRESTORE_COLLECTION)
-    .doc(FIRESTORE_DOC)
-    .get();
+// ── Feed State (stored in MyGeotab AddInData) ──
+async function loadFeedState(api) {
+  const results = await api.call('Get', {
+    typeName: 'AddInData',
+    search: { addInId: ADDIN_GUID }
+  });
 
-  if (doc.exists) {
-    return doc.data();
+  const stateDoc = (results || []).find(r => r.details && r.details.ruleType === FEED_STATE_TYPE);
+  if (stateDoc) {
+    return { id: stateDoc.id, toVersion: stateDoc.details.toVersion || null };
   }
-  return { toVersion: null };
+  return { id: null, toVersion: null };
 }
 
-async function saveFeedState(toVersion) {
-  await firestore
-    .collection(FIRESTORE_COLLECTION)
-    .doc(FIRESTORE_DOC)
-    .set({ toVersion, updatedAt: new Date().toISOString() }, { merge: true });
+async function saveFeedState(api, feedState, toVersion) {
+  const details = {
+    ruleType: FEED_STATE_TYPE,
+    toVersion,
+    updatedAt: new Date().toISOString()
+  };
+
+  if (feedState.id) {
+    await api.call('Set', {
+      typeName: 'AddInData',
+      entity: { id: feedState.id, addInId: ADDIN_GUID, details }
+    });
+  } else {
+    await api.call('Add', {
+      typeName: 'AddInData',
+      entity: { addInId: ADDIN_GUID, groups: [{ id: 'GroupCompanyId' }], details }
+    });
+  }
 }
 
 // ── GetFeed for DriverChange ──
@@ -279,40 +283,26 @@ function escapeHtml(s) {
     .replace(/"/g, '&quot;');
 }
 
-async function sendEmails(notifications, gmailCreds) {
+async function sendEmails(notifications, sendgridApiKey) {
   if (notifications.length === 0) return;
 
-  const transporter = nodemailer.createTransport({
-    service: 'gmail',
-    auth: {
-      user: gmailCreds.user,
-      pass: gmailCreds.appPassword
-    }
-  });
+  sgMail.setApiKey(sendgridApiKey);
 
-  // Group by recipient to batch
-  const byRecipient = {};
-  notifications.forEach(n => {
-    if (!byRecipient[n.recipientEmail]) {
-      byRecipient[n.recipientEmail] = [];
-    }
-    byRecipient[n.recipientEmail].push(n);
-  });
-
-  for (const [email, notifs] of Object.entries(byRecipient)) {
-    for (const notif of notifs) {
-      const subject = `Driver ${notif.eventType}: ${notif.driverName}`;
-      try {
-        await transporter.sendMail({
-          from: `"Driver Assignment Dashboard" <${gmailCreds.user}>`,
-          to: email,
-          subject,
-          html: buildEmailHtml(notif)
-        });
-        console.log(`Email sent to ${email}: ${subject}`);
-      } catch (err) {
-        console.error(`Failed to send email to ${email}:`, err.message);
-      }
+  for (const notif of notifications) {
+    const subject = `Driver ${notif.eventType}: ${notif.driverName}`;
+    try {
+      await sgMail.send({
+        to: notif.recipientEmail,
+        from: {
+          email: 'roustampallonji@geotab.com',
+          name: 'Driver Assignment Dashboard'
+        },
+        subject,
+        html: buildEmailHtml(notif)
+      });
+      console.log(`Email sent to ${notif.recipientEmail}: ${subject}`);
+    } catch (err) {
+      console.error(`Failed to send email to ${notif.recipientEmail}:`, err.message);
     }
   }
 }
@@ -329,16 +319,16 @@ exports.checkDriverChanges = async (req, res) => {
     const api = await authenticateMyGeotab(secrets.mygeotab);
     console.log('Authenticated to MyGeotab');
 
-    // 3. Load feed state
-    const feedState = await loadFeedState();
+    // 3. Load feed state from AddInData
+    const feedState = await loadFeedState(api);
     console.log('Feed state loaded, toVersion:', feedState.toVersion || 'initial');
 
     // 4. Poll GetFeed
     const feed = await pollDriverChangeFeed(api, feedState.toVersion);
     console.log(`Got ${feed.data.length} new changes, new toVersion: ${feed.toVersion}`);
 
-    // 5. Save new toVersion
-    await saveFeedState(feed.toVersion);
+    // 5. Save new toVersion to AddInData
+    await saveFeedState(api, feedState, feed.toVersion);
 
     if (feed.data.length === 0) {
       console.log('No new changes, done.');
@@ -363,8 +353,8 @@ exports.checkDriverChanges = async (req, res) => {
     const notifications = matchChangesToRules(feed.data, rules, names);
     console.log(`Matched ${notifications.length} notifications to send`);
 
-    // 9. Send emails
-    await sendEmails(notifications, secrets.gmail);
+    // 9. Send emails via SendGrid
+    await sendEmails(notifications, secrets.sendgridApiKey);
 
     console.log('Done.');
     if (res) res.status(200).send(`Processed ${feed.data.length} changes, sent ${notifications.length} notifications`);

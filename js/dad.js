@@ -6,7 +6,7 @@ geotab.addin.driverAssignmentDashboard = function () {
   'use strict';
 
   // ── Constants ──
-  var ADDIN_GUID = '0b12e5f9-b943-4a76-b09d-59fe896bb1b6';
+  var ADDIN_GUID = 'aECbVRyP_h0SwqL4l2-B5EQ';
   var RULE_TYPE = 'driverAssignmentNotification';
 
   // ── State ──
@@ -783,6 +783,7 @@ geotab.addin.driverAssignmentDashboard = function () {
                            notifyAssign, notifyUnassign, driverId, driverName) {
     return {
       addInId: ADDIN_GUID,
+      groups: [{ id: 'GroupCompanyId' }],
       details: {
         ruleType: RULE_TYPE,
         driverId: driverId || null,
