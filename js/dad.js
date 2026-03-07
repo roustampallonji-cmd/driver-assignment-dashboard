@@ -715,12 +715,38 @@ geotab.addin.driverAssignmentDashboard = function () {
     }
     hide(empty);
 
-    state.liveChanges.forEach(function (change) {
-      var driver = change.driver ? findDriverById(change.driver.id) : null;
-      var driverName = driver ? driverDisplayName(driver).trim() : (change.driver ? change.driver.id : 'Unknown');
+    // Filter out system sentinel entries (UnknownDriverId)
+    var displayChanges = state.liveChanges.filter(function (change) {
+      if (!change.driver || !change.driver.id) return false;
+      if (change.driver.id === 'UnknownDriverId') return false;
+      return true;
+    });
+
+    if (displayChanges.length === 0) {
+      show(empty);
+      return;
+    }
+
+    displayChanges.forEach(function (change) {
+      var driver = findDriverById(change.driver.id);
+      var driverName = driver ? driverDisplayName(driver).trim() : '';
+      // Fallback to state.rows if driver not found in state.drivers
+      if (!driverName) {
+        var row = findRowByDriverId(change.driver.id);
+        driverName = row ? row.name : change.driver.id;
+      }
+
       var device = change.device ? state.devices[change.device.id] : null;
-      var deviceName = device ? device.name : (change.device ? change.device.id : 'Unknown');
       var isAssign = change.device && change.device.id && change.device.id !== 'NoDeviceId';
+
+      // For unassignment, find the vehicle the driver was removed from
+      var vehicleName;
+      if (isAssign) {
+        vehicleName = device ? device.name : (change.device ? change.device.id : 'Unknown');
+      } else {
+        // Look through other recent changes or row data to find last vehicle
+        vehicleName = findLastVehicleForDriver(change.driver.id, change.dateTime);
+      }
 
       var item = document.createElement('div');
       item.className = 'dad-live-item';
@@ -738,19 +764,25 @@ geotab.addin.driverAssignmentDashboard = function () {
 
       var message = document.createElement('div');
       message.className = 'dad-live-message';
-      message.innerHTML = '<strong>' + escapeHtml(driverName) + '</strong>';
+      if (isAssign) {
+        message.innerHTML = '<strong>' + escapeHtml(driverName) + '</strong>';
+      } else {
+        message.innerHTML = '<strong>' + escapeHtml(driverName) + '</strong> <span class="dad-live-removed">removed from</span> <strong>' + escapeHtml(vehicleName) + '</strong>';
+      }
 
       var meta = document.createElement('div');
       meta.className = 'dad-live-meta';
-      var vehicleText = isAssign ? deviceName : '—';
-      var sinceText = isAssign ? formatDate(change.dateTime) : '—';
-      var atText = isAssign ? '—' : formatDate(change.dateTime);
-      meta.innerHTML =
-        '<span class="dad-live-meta-item"><span class="dad-live-meta-label">Vehicle:</span> ' + escapeHtml(vehicleText) + '</span>' +
-        '<span class="dad-live-meta-sep"></span>' +
-        '<span class="dad-live-meta-item"><span class="dad-live-meta-label">Assigned:</span> ' + escapeHtml(sinceText) + '</span>' +
-        '<span class="dad-live-meta-sep"></span>' +
-        '<span class="dad-live-meta-item"><span class="dad-live-meta-label">Unassigned:</span> ' + escapeHtml(atText) + '</span>';
+      if (isAssign) {
+        meta.innerHTML =
+          '<span class="dad-live-meta-item"><span class="dad-live-meta-label">Vehicle:</span> ' + escapeHtml(vehicleName) + '</span>' +
+          '<span class="dad-live-meta-sep"></span>' +
+          '<span class="dad-live-meta-item"><span class="dad-live-meta-label">Assigned:</span> ' + escapeHtml(formatDate(change.dateTime)) + '</span>';
+      } else {
+        meta.innerHTML =
+          '<span class="dad-live-meta-item"><span class="dad-live-meta-label">Vehicle:</span> ' + escapeHtml(vehicleName) + '</span>' +
+          '<span class="dad-live-meta-sep"></span>' +
+          '<span class="dad-live-meta-item"><span class="dad-live-meta-label">Unassigned at:</span> ' + escapeHtml(formatDate(change.dateTime)) + '</span>';
+      }
 
       details.appendChild(message);
       details.appendChild(meta);
@@ -781,6 +813,38 @@ geotab.addin.driverAssignmentDashboard = function () {
       if (state.drivers[i].id === id) return state.drivers[i];
     }
     return null;
+  }
+
+  function findRowByDriverId(id) {
+    for (var i = 0; i < state.rows.length; i++) {
+      if (state.rows[i].id === id) return state.rows[i];
+    }
+    return null;
+  }
+
+  function findLastVehicleForDriver(driverId, beforeDateTime) {
+    // Look through all driverChanges for the most recent assignment for this driver
+    var lastAssign = null;
+    var beforeTime = new Date(beforeDateTime).getTime();
+    state.driverChanges.forEach(function (dc) {
+      if (dc.driver && dc.driver.id === driverId &&
+          dc.device && dc.device.id && dc.device.id !== 'NoDeviceId') {
+        var dcTime = new Date(dc.dateTime).getTime();
+        if (dcTime <= beforeTime) {
+          if (!lastAssign || dcTime > new Date(lastAssign.dateTime).getTime()) {
+            lastAssign = dc;
+          }
+        }
+      }
+    });
+    if (lastAssign) {
+      var dev = state.devices[lastAssign.device.id];
+      return dev ? dev.name : lastAssign.device.id;
+    }
+    // Fallback: check if driver's row has a vehicle
+    var row = findRowByDriverId(driverId);
+    if (row && row.vehicle && row.vehicle !== '—') return row.vehicle;
+    return 'Unknown Vehicle';
   }
 
   function startLiveTimer() {

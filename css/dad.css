@@ -1255,8 +1255,24 @@
 }
 
 .dad-live-icon-unassign {
-  background: var(--dad-gray-bg);
-  color: var(--dad-gray);
+  background: #fef2f2;
+  color: var(--dad-red);
+}
+
+.dad-live-removed {
+  font-weight: 500;
+  color: var(--dad-red);
+  font-size: 12px;
+}
+
+/* Override unassigned pill to red inside live feed */
+.dad-live-item .dad-status-unassigned {
+  background: #fef2f2;
+  color: var(--dad-red);
+}
+
+.dad-live-item .dad-status-unassigned::before {
+  background: var(--dad-red);
 }
 
 .dad-live-details {
