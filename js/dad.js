@@ -1015,7 +1015,7 @@ geotab.addin.driverAssignmentDashboard = function () {
 
     focus: function (freshApi) {
       api = freshApi;
-      // Optionally refresh on focus
+      loadData();
     },
 
     blur: function () {
