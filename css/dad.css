@@ -1218,20 +1218,40 @@
 }
 
 #dad-live-feed {
-  padding: 8px 0;
+  padding: 0;
 }
 
-.dad-live-item {
-  display: flex;
+.dad-live-row {
+  display: grid;
+  grid-template-columns: 1.5fr 1.2fr 1.2fr 1.2fr 0.8fr 0.6fr;
   align-items: center;
-  gap: 14px;
   padding: 10px 24px;
+  gap: 12px;
   transition: background var(--dad-transition);
   animation: dad-liveSlideIn 0.3s ease;
+  border-bottom: 1px solid var(--dad-border-light);
 }
 
-.dad-live-item:hover {
+.dad-live-row:last-child {
+  border-bottom: none;
+}
+
+.dad-live-row:not(.dad-live-row-header):hover {
   background: var(--dad-hover);
+}
+
+.dad-live-row-header {
+  background: var(--dad-bg);
+  border-bottom: 1px solid var(--dad-border);
+  animation: none;
+}
+
+.dad-live-row-header .dad-live-col {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--dad-text-muted);
 }
 
 @keyframes dad-liveSlideIn {
@@ -1239,68 +1259,26 @@
   to { opacity: 1; transform: translateX(0); }
 }
 
-.dad-live-icon {
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-}
-
-.dad-live-icon-assign {
-  background: var(--dad-green-bg);
-  color: var(--dad-green);
-}
-
-.dad-live-icon-unassign {
-  background: var(--dad-gray-bg);
-  color: var(--dad-gray);
-}
-
-.dad-live-details {
-  flex: 1;
-  min-width: 0;
-}
-
-.dad-live-message {
+.dad-live-col {
   font-size: 13px;
-  font-weight: 500;
+  color: var(--dad-text-secondary);
+  font-weight: 400;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dad-live-col-name {
   color: var(--dad-text);
-  line-height: 1.4;
+  font-weight: 600;
 }
 
-.dad-live-message strong {
-  font-weight: 700;
-}
-
-.dad-live-time {
+.dad-live-col-time {
   font-size: 11px;
   color: var(--dad-text-muted);
-  white-space: nowrap;
-  flex-shrink: 0;
   font-weight: 500;
-}
-
-.dad-live-badge {
-  display: inline-block;
-  padding: 2px 8px;
-  border-radius: 100px;
-  font-size: 10px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.3px;
-}
-
-.dad-live-badge-assign {
-  background: var(--dad-green-bg);
-  color: var(--dad-green);
-}
-
-.dad-live-badge-unassign {
-  background: var(--dad-gray-bg);
-  color: var(--dad-gray);
+  text-align: right;
 }
 
 /* ===== Utility ===== */

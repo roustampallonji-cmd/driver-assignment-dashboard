@@ -715,6 +715,18 @@ geotab.addin.driverAssignmentDashboard = function () {
     }
     hide(empty);
 
+    // Add column header row
+    var headerRow = document.createElement('div');
+    headerRow.className = 'dad-live-row dad-live-row-header';
+    headerRow.innerHTML =
+      '<div class="dad-live-col dad-live-col-name">Driver Name</div>' +
+      '<div class="dad-live-col dad-live-col-vehicle">Current Vehicle</div>' +
+      '<div class="dad-live-col dad-live-col-since">Assigned Since</div>' +
+      '<div class="dad-live-col dad-live-col-at">Unassigned At</div>' +
+      '<div class="dad-live-col dad-live-col-status">Status</div>' +
+      '<div class="dad-live-col dad-live-col-time">When</div>';
+    feed.appendChild(headerRow);
+
     state.liveChanges.forEach(function (change) {
       var driver = change.driver ? findDriverById(change.driver.id) : null;
       var driverName = driver ? driverDisplayName(driver).trim() : (change.driver ? change.driver.id : 'Unknown');
@@ -722,39 +734,49 @@ geotab.addin.driverAssignmentDashboard = function () {
       var deviceName = device ? device.name : (change.device ? change.device.id : 'Unknown');
       var isAssign = change.device && change.device.id && change.device.id !== 'NoDeviceId';
 
-      var item = document.createElement('div');
-      item.className = 'dad-live-item';
+      var row = document.createElement('div');
+      row.className = 'dad-live-row';
 
-      // Icon
-      var icon = document.createElement('div');
-      icon.className = 'dad-live-icon ' + (isAssign ? 'dad-live-icon-assign' : 'dad-live-icon-unassign');
-      icon.innerHTML = isAssign
-        ? '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>'
-        : '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>';
+      // Driver Name
+      var colName = document.createElement('div');
+      colName.className = 'dad-live-col dad-live-col-name';
+      colName.innerHTML = '<strong>' + escapeHtml(driverName) + '</strong>';
 
-      // Details
-      var details = document.createElement('div');
-      details.className = 'dad-live-details';
+      // Current Vehicle
+      var colVehicle = document.createElement('div');
+      colVehicle.className = 'dad-live-col dad-live-col-vehicle';
+      colVehicle.textContent = isAssign ? deviceName : '—';
 
-      var message = document.createElement('div');
-      message.className = 'dad-live-message';
-      if (isAssign) {
-        message.innerHTML = '<strong>' + escapeHtml(driverName) + '</strong> assigned to <strong>' + escapeHtml(deviceName) + '</strong>';
-      } else {
-        message.innerHTML = '<strong>' + escapeHtml(driverName) + '</strong> unassigned from vehicle';
-      }
+      // Assigned Since
+      var colSince = document.createElement('div');
+      colSince.className = 'dad-live-col dad-live-col-since';
+      colSince.textContent = isAssign ? formatDate(change.dateTime) : '—';
 
-      details.appendChild(message);
+      // Unassigned At
+      var colAt = document.createElement('div');
+      colAt.className = 'dad-live-col dad-live-col-at';
+      colAt.textContent = isAssign ? '—' : formatDate(change.dateTime);
 
-      // Time
-      var time = document.createElement('div');
-      time.className = 'dad-live-time';
-      time.textContent = formatRelativeTime(change.dateTime);
+      // Status
+      var colStatus = document.createElement('div');
+      colStatus.className = 'dad-live-col dad-live-col-status';
+      var pill = document.createElement('span');
+      pill.className = 'dad-status-pill ' + (isAssign ? 'dad-status-assigned' : 'dad-status-unassigned');
+      pill.textContent = isAssign ? 'Assigned' : 'Unassigned';
+      colStatus.appendChild(pill);
 
-      item.appendChild(icon);
-      item.appendChild(details);
-      item.appendChild(time);
-      feed.appendChild(item);
+      // When (relative time)
+      var colTime = document.createElement('div');
+      colTime.className = 'dad-live-col dad-live-col-time';
+      colTime.textContent = formatRelativeTime(change.dateTime);
+
+      row.appendChild(colName);
+      row.appendChild(colVehicle);
+      row.appendChild(colSince);
+      row.appendChild(colAt);
+      row.appendChild(colStatus);
+      row.appendChild(colTime);
+      feed.appendChild(row);
     });
   }
 
