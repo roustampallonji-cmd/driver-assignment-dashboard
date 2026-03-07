@@ -43,9 +43,6 @@ geotab.addin.driverAssignmentDashboard = function () {
       'dad-selected-count', 'dad-btn-notif', 'dad-btn-export', 'dad-btn-clear',
       'dad-refresh-btn', 'dad-last-refresh',
       'dad-stat-total', 'dad-stat-assigned', 'dad-stat-unassigned',
-      'dad-timeline-overlay', 'dad-timeline-panel', 'dad-timeline-title',
-      'dad-timeline-close', 'dad-timeline-from', 'dad-timeline-to',
-      'dad-timeline-apply', 'dad-timeline-loading', 'dad-timeline-body',
       'dad-notif-modal', 'dad-notif-close', 'dad-notif-recipient',
       'dad-notif-email', 'dad-notif-assign', 'dad-notif-unassign',
       'dad-notif-error', 'dad-notif-rules-loading', 'dad-notif-rules-empty',
@@ -381,7 +378,7 @@ geotab.addin.driverAssignmentDashboard = function () {
       nameLink.href = '#';
       nameLink.addEventListener('click', function (ev) {
         ev.preventDefault();
-        openTimeline(row.id, row.name);
+        toggleTimeline(row.id, row.name, nameLink);
       });
       tdName.appendChild(nameLink);
       tr.appendChild(tdName);
@@ -487,29 +484,109 @@ geotab.addin.driverAssignmentDashboard = function () {
     }
   }
 
-  // ── Timeline Panel ──
-  function openTimeline(driverId, driverName) {
-    state.timelineDriverId = driverId;
-    dom['dad-timeline-title'].textContent = driverName + ' — Timeline';
+  // ── Inline Timeline Expansion ──
+  function toggleTimeline(driverId, driverName, nameLink) {
+    var tbody = dom['dad-tbody'];
+    var driverRow = tbody.querySelector('tr[data-id="' + driverId + '"]');
+    if (!driverRow) return;
 
-    // Set default date range: 30 days
+    // Check if already expanded
+    var existingExpand = driverRow.nextElementSibling;
+    if (existingExpand && existingExpand.classList.contains('dad-expand-row')) {
+      // Collapse
+      existingExpand.remove();
+      nameLink.classList.remove('dad-expanded');
+      state.timelineDriverId = null;
+      return;
+    }
+
+    // Collapse any other open expansion
+    var prevExpand = tbody.querySelector('.dad-expand-row');
+    if (prevExpand) {
+      prevExpand.remove();
+      var prevLink = tbody.querySelector('.dad-driver-name.dad-expanded');
+      if (prevLink) prevLink.classList.remove('dad-expanded');
+    }
+
+    // Create expand row
+    state.timelineDriverId = driverId;
+    nameLink.classList.add('dad-expanded');
+
+    var expandRow = document.createElement('tr');
+    expandRow.className = 'dad-expand-row';
+    var expandTd = document.createElement('td');
+    expandTd.setAttribute('colspan', '6');
+
+    var content = document.createElement('div');
+    content.className = 'dad-expand-content';
+
+    // Header with date controls
+    var header = document.createElement('div');
+    header.className = 'dad-expand-header';
+
+    var title = document.createElement('div');
+    title.className = 'dad-expand-title';
+    title.textContent = 'Assignment History';
+
+    var controls = document.createElement('div');
+    controls.className = 'dad-expand-controls';
+
     var now = new Date();
     var thirtyAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-    dom['dad-timeline-from'].value = toISODate(thirtyAgo);
-    dom['dad-timeline-to'].value = toISODate(now);
 
-    show(dom['dad-timeline-overlay']);
-    loadTimeline(driverId, thirtyAgo, now);
+    var fromLabel = document.createElement('label');
+    fromLabel.textContent = 'From: ';
+    var fromInput = document.createElement('input');
+    fromInput.type = 'date';
+    fromInput.value = toISODate(thirtyAgo);
+    fromLabel.appendChild(fromInput);
+
+    var toLabel = document.createElement('label');
+    toLabel.textContent = 'To: ';
+    var toInput = document.createElement('input');
+    toInput.type = 'date';
+    toInput.value = toISODate(now);
+    toLabel.appendChild(toInput);
+
+    var applyBtn = document.createElement('button');
+    applyBtn.className = 'dad-expand-apply';
+    applyBtn.textContent = 'Apply';
+
+    controls.appendChild(fromLabel);
+    controls.appendChild(toLabel);
+    controls.appendChild(applyBtn);
+
+    header.appendChild(title);
+    header.appendChild(controls);
+    content.appendChild(header);
+
+    // Timeline body container
+    var timelineBody = document.createElement('div');
+    timelineBody.className = 'dad-expand-timeline-body';
+    content.appendChild(timelineBody);
+
+    expandTd.appendChild(content);
+    expandRow.appendChild(expandTd);
+
+    // Insert after the driver row
+    driverRow.parentNode.insertBefore(expandRow, driverRow.nextSibling);
+
+    // Load timeline data
+    loadInlineTimeline(driverId, thirtyAgo, now, timelineBody);
+
+    // Apply button handler
+    applyBtn.addEventListener('click', function () {
+      var from = new Date(fromInput.value);
+      var to = new Date(toInput.value);
+      to.setHours(23, 59, 59, 999);
+      if (!isNaN(from.getTime()) && !isNaN(to.getTime())) {
+        loadInlineTimeline(driverId, from, to, timelineBody);
+      }
+    });
   }
 
-  function closeTimeline() {
-    hide(dom['dad-timeline-overlay']);
-    state.timelineDriverId = null;
-  }
-
-  function loadTimeline(driverId, fromDate, toDate) {
-    show(dom['dad-timeline-loading']);
-    dom['dad-timeline-body'].innerHTML = '';
+  function loadInlineTimeline(driverId, fromDate, toDate, container) {
+    container.innerHTML = '<div class="dad-expand-loading"><div class="dad-spinner dad-spinner-sm"></div><span>Loading timeline...</span></div>';
 
     api.call('Get', {
       typeName: 'DriverChange',
@@ -520,21 +597,19 @@ geotab.addin.driverAssignmentDashboard = function () {
         includeOverlappedChanges: true
       }
     }, function (changes) {
-      hide(dom['dad-timeline-loading']);
-      renderTimeline(changes || []);
+      renderInlineTimeline(changes || [], container);
     }, function (err) {
-      hide(dom['dad-timeline-loading']);
-      dom['dad-timeline-body'].innerHTML =
+      container.innerHTML =
         '<div class="dad-timeline-empty">Error loading timeline: ' +
         escapeHtml(err.message || String(err)) + '</div>';
     });
   }
 
-  function renderTimeline(changes) {
-    var body = dom['dad-timeline-body'];
+  function renderInlineTimeline(changes, container) {
+    container.innerHTML = '';
 
     if (changes.length === 0) {
-      body.innerHTML = '<div class="dad-timeline-empty">No assignment changes found for this date range.</div>';
+      container.innerHTML = '<div class="dad-timeline-empty">No assignment changes found for this date range.</div>';
       return;
     }
 
@@ -569,7 +644,7 @@ geotab.addin.driverAssignmentDashboard = function () {
 
       var typeEl = document.createElement('div');
       typeEl.className = 'dad-timeline-type';
-      typeEl.textContent = isAssign ? 'Assigned to vehicle' : 'Unassigned from vehicle';
+      typeEl.textContent = isAssign ? 'Assigned' : 'Unassigned';
 
       card.appendChild(dateEl);
       card.appendChild(vehicleEl);
@@ -578,8 +653,7 @@ geotab.addin.driverAssignmentDashboard = function () {
       list.appendChild(item);
     });
 
-    body.innerHTML = '';
-    body.appendChild(list);
+    container.appendChild(list);
   }
 
   // ── Notification Rules ──
@@ -889,22 +963,6 @@ geotab.addin.driverAssignmentDashboard = function () {
       loadData();
     });
 
-    // Timeline
-    dom['dad-timeline-close'].addEventListener('click', closeTimeline);
-    dom['dad-timeline-overlay'].addEventListener('click', function (e) {
-      if (e.target === dom['dad-timeline-overlay']) {
-        closeTimeline();
-      }
-    });
-    dom['dad-timeline-apply'].addEventListener('click', function () {
-      var from = new Date(dom['dad-timeline-from'].value);
-      var to = new Date(dom['dad-timeline-to'].value);
-      to.setHours(23, 59, 59, 999);
-      if (state.timelineDriverId && !isNaN(from.getTime()) && !isNaN(to.getTime())) {
-        loadTimeline(state.timelineDriverId, from, to);
-      }
-    });
-
     // Notification modal
     dom['dad-notif-close'].addEventListener('click', closeNotifModal);
     dom['dad-notif-cancel'].addEventListener('click', closeNotifModal);
@@ -926,8 +984,13 @@ geotab.addin.driverAssignmentDashboard = function () {
       if (e.key === 'Escape') {
         if (!dom['dad-notif-modal'].classList.contains('dad-hidden')) {
           closeNotifModal();
-        } else if (!dom['dad-timeline-overlay'].classList.contains('dad-hidden')) {
-          closeTimeline();
+        } else if (state.timelineDriverId) {
+          // Collapse any open inline timeline
+          var expandRow = dom['dad-tbody'].querySelector('.dad-expand-row');
+          if (expandRow) expandRow.remove();
+          var expandedLink = dom['dad-tbody'].querySelector('.dad-driver-name.dad-expanded');
+          if (expandedLink) expandedLink.classList.remove('dad-expanded');
+          state.timelineDriverId = null;
         }
       }
     });
