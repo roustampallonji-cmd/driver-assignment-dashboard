@@ -1218,40 +1218,20 @@
 }
 
 #dad-live-feed {
-  padding: 0;
+  padding: 8px 0;
 }
 
-.dad-live-row {
-  display: grid;
-  grid-template-columns: 1.5fr 1.2fr 1.2fr 1.2fr 0.8fr 0.6fr;
+.dad-live-item {
+  display: flex;
   align-items: center;
+  gap: 14px;
   padding: 10px 24px;
-  gap: 12px;
   transition: background var(--dad-transition);
   animation: dad-liveSlideIn 0.3s ease;
-  border-bottom: 1px solid var(--dad-border-light);
 }
 
-.dad-live-row:last-child {
-  border-bottom: none;
-}
-
-.dad-live-row:not(.dad-live-row-header):hover {
+.dad-live-item:hover {
   background: var(--dad-hover);
-}
-
-.dad-live-row-header {
-  background: var(--dad-bg);
-  border-bottom: 1px solid var(--dad-border);
-  animation: none;
-}
-
-.dad-live-row-header .dad-live-col {
-  font-size: 11px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.6px;
-  color: var(--dad-text-muted);
 }
 
 @keyframes dad-liveSlideIn {
@@ -1259,25 +1239,80 @@
   to { opacity: 1; transform: translateX(0); }
 }
 
-.dad-live-col {
-  font-size: 13px;
-  color: var(--dad-text-secondary);
-  font-weight: 400;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.dad-live-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
 }
 
-.dad-live-col-name {
+.dad-live-icon-assign {
+  background: var(--dad-green-bg);
+  color: var(--dad-green);
+}
+
+.dad-live-icon-unassign {
+  background: var(--dad-gray-bg);
+  color: var(--dad-gray);
+}
+
+.dad-live-details {
+  flex: 1;
+  min-width: 0;
+}
+
+.dad-live-message {
+  font-size: 13px;
+  font-weight: 500;
   color: var(--dad-text);
+  line-height: 1.4;
+}
+
+.dad-live-message strong {
+  font-weight: 700;
+}
+
+.dad-live-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 3px;
+  flex-wrap: wrap;
+}
+
+.dad-live-meta-item {
+  font-size: 11px;
+  color: var(--dad-text-secondary);
+  font-weight: 400;
+}
+
+.dad-live-meta-label {
+  color: var(--dad-text-muted);
   font-weight: 600;
 }
 
-.dad-live-col-time {
+.dad-live-meta-sep {
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: var(--dad-text-muted);
+  flex-shrink: 0;
+}
+
+.dad-live-status {
+  flex-shrink: 0;
+}
+
+.dad-live-time {
   font-size: 11px;
   color: var(--dad-text-muted);
+  white-space: nowrap;
+  flex-shrink: 0;
   font-weight: 500;
+  min-width: 70px;
   text-align: right;
 }
 
