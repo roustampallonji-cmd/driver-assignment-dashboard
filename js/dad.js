@@ -420,9 +420,12 @@ geotab.addin.driverAssignmentDashboard = function () {
     var assigned = state.filtered.filter(function (r) { return r.status === 'Assigned'; }).length;
     var unassigned = total - assigned;
 
-    dom['dad-stat-total'].innerHTML = 'Total: <strong>' + total + '</strong>';
-    dom['dad-stat-assigned'].innerHTML = 'Assigned: <strong>' + assigned + '</strong>';
-    dom['dad-stat-unassigned'].innerHTML = 'Unassigned: <strong>' + unassigned + '</strong>';
+    var totalCard = dom['dad-stat-total'];
+    var assignedCard = dom['dad-stat-assigned'];
+    var unassignedCard = dom['dad-stat-unassigned'];
+    if (totalCard) totalCard.querySelector('.dad-stat-value').textContent = total;
+    if (assignedCard) assignedCard.querySelector('.dad-stat-value').textContent = assigned;
+    if (unassignedCard) unassignedCard.querySelector('.dad-stat-value').textContent = unassigned;
   }
 
   // ── Selection ──
