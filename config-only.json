@@ -1,14 +1,16 @@
 {
     "name": "Driver Assignment Dashboard",
     "supportEmail": "roustampallonji@geotab.com",
-    "version": "1.0",
+    "version": "1.0.0",
     "items": [
         {
-            "url": "addin-driver-assignment-dashboard.html",
-            "path": "ActivityLink",
+            "url": "https://roustampallonji-cmd.github.io/driver-assignment-dashboard/addin-driver-assignment-dashboard.html",
+            "path": "ActivityLink/",
             "menuName": {
                 "en": "Driver Assignment Dashboard"
-            }
+            },
+            "icon": "https://cdn-icons-png.flaticon.com/512/3774/3774299.png"
         }
-    ]
+    ],
+    "isSigned": false
 }

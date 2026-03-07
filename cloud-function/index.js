@@ -159,32 +159,37 @@ async function resolveNames(api, changes) {
   });
 
   const calls = [];
-  if (driverIds.size > 0) {
-    calls.push(['Get', { typeName: 'User', search: { id: [...driverIds] } }]);
-  }
-  if (deviceIds.size > 0) {
-    calls.push(['Get', { typeName: 'Device', search: { id: [...deviceIds] } }]);
-  }
+  // Individual Get calls per driver ID
+  [...driverIds].forEach(id => {
+    calls.push({ method: 'Get', params: { typeName: 'User', search: { id } } });
+  });
+  // Individual Get calls per device ID
+  [...deviceIds].forEach(id => {
+    calls.push({ method: 'Get', params: { typeName: 'Device', search: { id } } });
+  });
 
   if (calls.length === 0) return { drivers: {}, devices: {} };
 
-  const results = await api.call('ExecuteMultiCall', { calls: calls.map(c => ({ method: c[0], params: c[1] })) });
+  const results = await api.call('ExecuteMultiCall', { calls });
 
   const drivers = {};
   const devices = {};
 
   let idx = 0;
-  if (driverIds.size > 0) {
-    (results[idx] || []).forEach(u => {
-      drivers[u.id] = (u.firstName || '') + ' ' + (u.lastName || '');
-    });
+  [...driverIds].forEach(() => {
+    const res = results[idx] || [];
+    if (res.length > 0) {
+      drivers[res[0].id] = (res[0].firstName || '') + ' ' + (res[0].lastName || '');
+    }
     idx++;
-  }
-  if (deviceIds.size > 0) {
-    (results[idx] || []).forEach(d => {
-      devices[d.id] = d.name || d.id;
-    });
-  }
+  });
+  [...deviceIds].forEach(() => {
+    const res = results[idx] || [];
+    if (res.length > 0) {
+      devices[res[0].id] = res[0].name || res[0].id;
+    }
+    idx++;
+  });
 
   return { drivers, devices };
 }

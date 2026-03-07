@@ -29,7 +29,10 @@ geotab.addin.driverAssignmentDashboard = function () {
       timelineDriverId: null,
       notifRules: [],
       adminUsers: [],
-      currentUser: null
+      currentUser: null,
+      liveMinutes: 5,
+      liveChanges: [],
+      liveTimer: null
     };
   }
 
@@ -43,6 +46,7 @@ geotab.addin.driverAssignmentDashboard = function () {
       'dad-selected-count', 'dad-btn-notif', 'dad-btn-export', 'dad-btn-clear',
       'dad-refresh-btn', 'dad-last-refresh',
       'dad-stat-total', 'dad-stat-assigned', 'dad-stat-unassigned',
+      'dad-live-feed', 'dad-live-empty',
       'dad-notif-modal', 'dad-notif-close', 'dad-notif-recipient',
       'dad-notif-email', 'dad-notif-assign', 'dad-notif-unassign',
       'dad-notif-error', 'dad-notif-rules-loading', 'dad-notif-rules-empty',
@@ -52,6 +56,7 @@ geotab.addin.driverAssignmentDashboard = function () {
       dom[id] = document.getElementById(id);
     });
     dom.sortHeaders = document.querySelectorAll('.dad-sortable');
+    dom.liveFilters = document.querySelectorAll('.dad-live-filter');
   }
 
   // ── Helpers ──
@@ -136,6 +141,10 @@ geotab.addin.driverAssignmentDashboard = function () {
       hide(dom['dad-loading']);
       dom['dad-refresh-btn'].classList.remove('dad-spinning');
       dom['dad-last-refresh'].textContent = 'Last refreshed: ' + formatDate(new Date());
+
+      // Load live activity feed
+      loadLiveActivity();
+      startLiveTimer();
     }, function (err) {
       hide(dom['dad-loading']);
       dom['dad-refresh-btn'].classList.remove('dad-spinning');
@@ -659,6 +668,117 @@ geotab.addin.driverAssignmentDashboard = function () {
     container.appendChild(list);
   }
 
+  // ── Live Activity Feed ──
+  function formatRelativeTime(dateStr) {
+    var now = new Date();
+    var dt = new Date(dateStr);
+    var diffMs = now - dt;
+    var diffSec = Math.floor(diffMs / 1000);
+    if (diffSec < 60) return 'just now';
+    var diffMin = Math.floor(diffSec / 60);
+    if (diffMin < 60) return diffMin + ' min ago';
+    var diffHr = Math.floor(diffMin / 60);
+    return diffHr + ' hr ago';
+  }
+
+  function loadLiveActivity() {
+    var now = new Date();
+    var from = new Date(now.getTime() - state.liveMinutes * 60 * 1000);
+
+    api.call('Get', {
+      typeName: 'DriverChange',
+      search: {
+        fromDate: from.toISOString(),
+        toDate: now.toISOString(),
+        includeOverlappedChanges: true
+      }
+    }, function (changes) {
+      state.liveChanges = (changes || []).sort(function (a, b) {
+        return new Date(b.dateTime) - new Date(a.dateTime);
+      });
+      renderLiveActivity();
+    }, function () {
+      // Silently fail — don't disrupt main UI
+      state.liveChanges = [];
+      renderLiveActivity();
+    });
+  }
+
+  function renderLiveActivity() {
+    var feed = dom['dad-live-feed'];
+    var empty = dom['dad-live-empty'];
+    feed.innerHTML = '';
+
+    if (state.liveChanges.length === 0) {
+      show(empty);
+      return;
+    }
+    hide(empty);
+
+    state.liveChanges.forEach(function (change) {
+      var driver = change.driver ? findDriverById(change.driver.id) : null;
+      var driverName = driver ? driverDisplayName(driver).trim() : (change.driver ? change.driver.id : 'Unknown');
+      var device = change.device ? state.devices[change.device.id] : null;
+      var deviceName = device ? device.name : (change.device ? change.device.id : 'Unknown');
+      var isAssign = change.device && change.device.id && change.device.id !== 'NoDeviceId';
+
+      var item = document.createElement('div');
+      item.className = 'dad-live-item';
+
+      // Icon
+      var icon = document.createElement('div');
+      icon.className = 'dad-live-icon ' + (isAssign ? 'dad-live-icon-assign' : 'dad-live-icon-unassign');
+      icon.innerHTML = isAssign
+        ? '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>'
+        : '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>';
+
+      // Details
+      var details = document.createElement('div');
+      details.className = 'dad-live-details';
+
+      var message = document.createElement('div');
+      message.className = 'dad-live-message';
+      if (isAssign) {
+        message.innerHTML = '<strong>' + escapeHtml(driverName) + '</strong> assigned to <strong>' + escapeHtml(deviceName) + '</strong>';
+      } else {
+        message.innerHTML = '<strong>' + escapeHtml(driverName) + '</strong> unassigned from vehicle';
+      }
+
+      details.appendChild(message);
+
+      // Time
+      var time = document.createElement('div');
+      time.className = 'dad-live-time';
+      time.textContent = formatRelativeTime(change.dateTime);
+
+      item.appendChild(icon);
+      item.appendChild(details);
+      item.appendChild(time);
+      feed.appendChild(item);
+    });
+  }
+
+  function findDriverById(id) {
+    for (var i = 0; i < state.drivers.length; i++) {
+      if (state.drivers[i].id === id) return state.drivers[i];
+    }
+    return null;
+  }
+
+  function startLiveTimer() {
+    stopLiveTimer();
+    state.liveTimer = setInterval(function () {
+      loadLiveActivity();
+    }, 30000); // refresh every 30 seconds
+  }
+
+  function stopLiveTimer() {
+    if (state.liveTimer) {
+      clearInterval(state.liveTimer);
+      state.liveTimer = null;
+    }
+  }
+
   // ── Notification Rules ──
   function openNotifModal() {
     hide(dom['dad-notif-error']);
@@ -982,6 +1102,16 @@ geotab.addin.driverAssignmentDashboard = function () {
       dom['dad-notif-email'].value = opt ? (opt.getAttribute('data-email') || '') : '';
     });
 
+    // Live activity filters
+    dom.liveFilters.forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        dom.liveFilters.forEach(function (b) { b.classList.remove('dad-live-filter-active'); });
+        btn.classList.add('dad-live-filter-active');
+        state.liveMinutes = parseInt(btn.getAttribute('data-minutes'), 10) || 5;
+        loadLiveActivity();
+      });
+    });
+
     // Keyboard shortcuts
     document.addEventListener('keydown', function (e) {
       if (e.key === 'Escape') {
@@ -1022,7 +1152,7 @@ geotab.addin.driverAssignmentDashboard = function () {
     },
 
     blur: function () {
-      // Cleanup if needed
+      stopLiveTimer();
     }
   };
 };

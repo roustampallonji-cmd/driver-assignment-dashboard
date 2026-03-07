@@ -121,6 +121,26 @@
   <!-- Error Banner -->
   <div id="dad-error" class="dad-hidden"></div>
 
+  <!-- Live Activity Feed -->
+  <div id="dad-live-wrap">
+    <div id="dad-live-header">
+      <div id="dad-live-title">
+        <span class="dad-live-dot"></span>
+        Live Activity
+      </div>
+      <div id="dad-live-filters">
+        <button class="dad-live-filter dad-live-filter-active" data-minutes="5">5 min</button>
+        <button class="dad-live-filter" data-minutes="15">15 min</button>
+        <button class="dad-live-filter" data-minutes="30">30 min</button>
+        <button class="dad-live-filter" data-minutes="60">1 hr</button>
+      </div>
+    </div>
+    <div id="dad-live-body">
+      <div id="dad-live-empty" class="dad-hidden">No recent activity</div>
+      <div id="dad-live-feed"></div>
+    </div>
+  </div>
+
   <!-- Table -->
   <div id="dad-table-wrap">
     <table id="dad-table">
