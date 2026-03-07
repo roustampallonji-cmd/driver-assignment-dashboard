@@ -63,12 +63,12 @@
   <div id="dad-action-bar" class="dad-hidden">
     <span id="dad-selected-count">0 selected</span>
     <div id="dad-action-buttons">
-      <button id="dad-btn-email" class="dad-action-btn dad-btn-email" title="Email notification">
+      <button id="dad-btn-notif" class="dad-action-btn dad-btn-notif" title="Notification rules">
         <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/>
-          <polyline points="22,6 12,13 2,6"/>
+          <path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+          <path d="M13.73 21a2 2 0 01-3.46 0"/>
         </svg>
-        Email
+        Notifications
       </button>
       <button id="dad-btn-export" class="dad-action-btn dad-btn-export" title="Export CSV">
         <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
@@ -135,30 +135,55 @@
     </div>
   </div>
 
-  <!-- Email Modal -->
-  <div id="dad-email-modal" class="dad-hidden">
-    <div id="dad-email-dialog">
-      <div id="dad-email-header">
-        <h3>Email Notification</h3>
-        <button id="dad-email-close" title="Close">&times;</button>
+  <!-- Notification Rules Modal -->
+  <div id="dad-notif-modal" class="dad-hidden">
+    <div id="dad-notif-dialog">
+      <div id="dad-notif-header">
+        <h3>Notification Rules</h3>
+        <button id="dad-notif-close" title="Close">&times;</button>
       </div>
-      <div id="dad-email-body">
+      <div id="dad-notif-body">
+        <div id="dad-notif-error" class="dad-notif-error dad-hidden"></div>
+
+        <!-- Add Rule Form -->
+        <div class="dad-notif-section-label">Add New Rule</div>
         <div class="dad-form-group">
-          <label for="dad-email-to">To:</label>
-          <input type="email" id="dad-email-to" placeholder="recipient@example.com"/>
+          <label for="dad-notif-recipient">Recipient</label>
+          <select id="dad-notif-recipient">
+            <option value="">Select an admin user...</option>
+          </select>
         </div>
         <div class="dad-form-group">
-          <label for="dad-email-subject">Subject:</label>
-          <input type="text" id="dad-email-subject" readonly/>
+          <label for="dad-notif-email">Email</label>
+          <input type="email" id="dad-notif-email" placeholder="Auto-filled from recipient" readonly/>
         </div>
         <div class="dad-form-group">
-          <label for="dad-email-content">Body:</label>
-          <textarea id="dad-email-content" rows="10" readonly></textarea>
+          <label>Notify On</label>
+          <div class="dad-notif-checkboxes">
+            <label><input type="checkbox" id="dad-notif-assign" checked/> Assignment</label>
+            <label><input type="checkbox" id="dad-notif-unassign" checked/> Unassignment</label>
+          </div>
         </div>
+        <div class="dad-form-group">
+          <label>Scope</label>
+          <div class="dad-notif-checkboxes">
+            <label><input type="radio" name="dad-notif-scope" value="all" checked/> All Drivers</label>
+            <label><input type="radio" name="dad-notif-scope" value="selected"/> Selected Drivers Only</label>
+          </div>
+        </div>
+
+        <!-- Existing Rules -->
+        <div class="dad-notif-section-label">Active Rules</div>
+        <div id="dad-notif-rules-loading" class="dad-hidden">
+          <div class="dad-spinner dad-spinner-sm"></div>
+          <span>Loading rules...</span>
+        </div>
+        <div id="dad-notif-rules-empty" class="dad-hidden">No notification rules configured yet.</div>
+        <div id="dad-notif-rules-list"></div>
       </div>
-      <div id="dad-email-footer">
-        <button id="dad-email-send" class="dad-action-btn dad-btn-email">Open in Email Client</button>
-        <button id="dad-email-cancel" class="dad-action-btn dad-btn-clear">Cancel</button>
+      <div id="dad-notif-footer">
+        <button id="dad-notif-add" class="dad-action-btn dad-btn-notif">Add Rule</button>
+        <button id="dad-notif-cancel" class="dad-action-btn dad-btn-clear">Close</button>
       </div>
     </div>
   </div>

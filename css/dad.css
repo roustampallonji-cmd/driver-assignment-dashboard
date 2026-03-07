@@ -291,12 +291,12 @@
   transform: translateY(0);
 }
 
-.dad-btn-email {
+.dad-btn-notif {
   background: var(--dad-primary);
   color: white;
 }
 
-.dad-btn-email:hover {
+.dad-btn-notif:hover {
   background: var(--dad-primary-dark);
 }
 
@@ -728,8 +728,8 @@
   font-size: 14px;
 }
 
-/* ===== Email Modal ===== */
-#dad-email-modal {
+/* ===== Notification Rules Modal ===== */
+#dad-notif-modal {
   position: fixed;
   top: 0;
   left: 0;
@@ -743,11 +743,11 @@
   animation: dad-fadeIn 0.2s ease;
 }
 
-#dad-email-dialog {
+#dad-notif-dialog {
   background: var(--dad-card);
   border-radius: var(--dad-radius);
   box-shadow: var(--dad-shadow-lg);
-  width: 560px;
+  width: 640px;
   max-width: 90vw;
   max-height: 80vh;
   display: flex;
@@ -760,7 +760,7 @@
   to { transform: scale(1); opacity: 1; }
 }
 
-#dad-email-header {
+#dad-notif-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -768,12 +768,12 @@
   border-bottom: 1px solid var(--dad-border);
 }
 
-#dad-email-header h3 {
+#dad-notif-header h3 {
   font-size: 16px;
   font-weight: 600;
 }
 
-#dad-email-close {
+#dad-notif-close {
   background: none;
   border: none;
   font-size: 22px;
@@ -788,11 +788,11 @@
   transition: background var(--dad-transition);
 }
 
-#dad-email-close:hover {
+#dad-notif-close:hover {
   background: var(--dad-gray-bg);
 }
 
-#dad-email-body {
+#dad-notif-body {
   padding: 20px;
   overflow-y: auto;
   flex: 1;
@@ -813,7 +813,8 @@
 }
 
 .dad-form-group input,
-.dad-form-group textarea {
+.dad-form-group textarea,
+.dad-form-group select {
   width: 100%;
   padding: 10px 12px;
   border: 1px solid var(--dad-border);
@@ -826,18 +827,147 @@
 }
 
 .dad-form-group input:focus,
-.dad-form-group textarea:focus {
+.dad-form-group textarea:focus,
+.dad-form-group select:focus {
   border-color: var(--dad-primary);
   outline: none;
   box-shadow: 0 0 0 3px rgba(26,115,232,0.15);
 }
 
-#dad-email-footer {
+#dad-notif-footer {
   display: flex;
   justify-content: flex-end;
   gap: 8px;
   padding: 16px 20px;
   border-top: 1px solid var(--dad-border);
+}
+
+/* Section labels within notification modal */
+.dad-notif-section-label {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--dad-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin: 20px 0 10px;
+  padding-top: 16px;
+  border-top: 1px solid var(--dad-border);
+}
+
+.dad-notif-section-label:first-child {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: none;
+}
+
+/* Inline checkbox group */
+.dad-notif-checkboxes {
+  display: flex;
+  gap: 20px;
+  font-size: 14px;
+}
+
+.dad-notif-checkboxes label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--dad-text);
+  cursor: pointer;
+}
+
+.dad-notif-checkboxes input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--dad-primary);
+}
+
+/* Inline error within modal */
+.dad-notif-error {
+  font-size: 12px;
+  color: var(--dad-red);
+  background: #fce8e6;
+  border-radius: var(--dad-radius-sm);
+  padding: 8px 10px;
+  margin-bottom: 10px;
+}
+
+/* Notification rule cards */
+.dad-notif-rule-card {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  background: #f8f9fa;
+  border-radius: var(--dad-radius);
+  border-left: 3px solid var(--dad-primary);
+  margin-bottom: 8px;
+  animation: dad-fadeIn 0.2s ease;
+}
+
+.dad-notif-rule-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.dad-notif-rule-recipient {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--dad-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dad-notif-rule-scope {
+  font-size: 12px;
+  color: var(--dad-text-secondary);
+  margin-top: 2px;
+}
+
+.dad-notif-rule-events {
+  font-size: 12px;
+  color: var(--dad-text-muted);
+  margin-top: 2px;
+}
+
+.dad-notif-rule-delete {
+  flex-shrink: 0;
+  background: none;
+  border: 1px solid var(--dad-border);
+  border-radius: var(--dad-radius-sm);
+  padding: 4px 10px;
+  font-size: 12px;
+  color: var(--dad-red);
+  cursor: pointer;
+  font-family: var(--dad-font);
+  transition: background var(--dad-transition), border-color var(--dad-transition);
+}
+
+.dad-notif-rule-delete:hover {
+  background: #fce8e6;
+  border-color: var(--dad-red);
+}
+
+#dad-notif-rules-loading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 20px;
+  color: var(--dad-text-secondary);
+  font-size: 13px;
+  justify-content: center;
+}
+
+#dad-notif-rules-empty {
+  text-align: center;
+  color: var(--dad-text-muted);
+  padding: 20px;
+  font-size: 13px;
 }
 
 /* ===== Utility ===== */
