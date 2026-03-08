@@ -755,8 +755,8 @@ geotab.addin.driverAssignmentDashboard = function () {
       var icon = document.createElement('div');
       icon.className = 'dad-live-icon ' + (isAssign ? 'dad-live-icon-assign' : 'dad-live-icon-unassign');
       icon.innerHTML = isAssign
-        ? '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>'
-        : '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>';
+        ? '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>'
+        : '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>';
 
       // Details block
       var details = document.createElement('div');
@@ -765,9 +765,9 @@ geotab.addin.driverAssignmentDashboard = function () {
       var message = document.createElement('div');
       message.className = 'dad-live-message';
       if (isAssign) {
-        message.innerHTML = '<strong>' + escapeHtml(driverName) + '</strong>';
+        message.innerHTML = '<strong>' + escapeHtml(driverName) + '</strong> <span class="dad-live-assigned-to">assigned to</span> <strong>' + escapeHtml(vehicleName) + '</strong>';
       } else {
-        message.innerHTML = '<strong>' + escapeHtml(driverName) + '</strong> <span class="dad-live-removed">removed from</span> <strong>' + escapeHtml(vehicleName) + '</strong>';
+        message.innerHTML = '<strong>' + escapeHtml(driverName) + '</strong> <span class="dad-live-removed">unassigned from</span> <strong>' + escapeHtml(vehicleName) + '</strong>';
       }
 
       var meta = document.createElement('div');
