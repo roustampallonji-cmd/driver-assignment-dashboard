@@ -47,6 +47,7 @@ export default function App({ apiRef }) {
   const liveLoadingRef = useRef(false); // guard against overlapping live polls
   const prevDriverToDeviceRef = useRef(null); // tracks driver→device for change detection
   const prevDeviceToDriverRef = useRef(null); // tracks device→driver for same-vehicle switch detection
+  const detectedEventsRef = useRef([]); // accumulates detected events across polls
 
   // ── Data Loading ──
   const loadData = useCallback(function () {
@@ -217,8 +218,17 @@ export default function App({ apiRef }) {
       prevDriverToDeviceRef.current = curDriverToDevice;
       prevDeviceToDriverRef.current = curDeviceToDriver;
 
-      // Process DriverChange records (existing approach)
-      var fromTime = from.getTime();
+      // Accumulate new detected events into persistent ref
+      if (detectedEvents.length > 0) {
+        detectedEventsRef.current = detectedEventsRef.current.concat(detectedEvents);
+      }
+
+      // Prune old detected events outside the time window
+      detectedEventsRef.current = detectedEventsRef.current.filter(function (e) {
+        return new Date(e.dateTime).getTime() >= fromTime;
+      });
+
+      // Process DriverChange records from API
       var apiEvents = changes
         .filter(function (c) { return new Date(c.dateTime).getTime() >= fromTime; })
         .filter(function (c) {
@@ -226,14 +236,14 @@ export default function App({ apiRef }) {
           return false;
         });
 
-      // Merge: detected events + API events, deduplicate by driverId+type within 5 seconds
-      var allEvents = detectedEvents.concat(apiEvents);
+      // Merge: accumulated detected events + API events, deduplicate
+      var allEvents = detectedEventsRef.current.concat(apiEvents);
       var seen = {};
       var deduped = allEvents.filter(function (c) {
         var dId = c.driver.id;
         var devId = c.device.id;
-        var isAssign = devId && devId !== "NoDeviceId";
-        var key = dId + "_" + (isAssign ? "assign" : "unassign") + "_" + Math.round(new Date(c.dateTime).getTime() / 5000);
+        var type = c._detectedType || (devId && devId !== "NoDeviceId" ? "assign" : "unassign");
+        var key = dId + "_" + type + "_" + Math.round(new Date(c.dateTime).getTime() / 5000);
         if (seen[key]) return false;
         seen[key] = true;
         return true;
