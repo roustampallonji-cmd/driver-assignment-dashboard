@@ -218,63 +218,6 @@
   line-height: 1;
 }
 
-/* Clickable live stats */
-.dad-stat-clickable {
-  cursor: pointer;
-  position: relative;
-}
-
-.dad-stat-clickable::after {
-  content: 'Click to filter';
-  position: absolute;
-  bottom: 6px;
-  right: 12px;
-  font-size: 9px;
-  font-weight: 600;
-  color: var(--dad-text-muted);
-  opacity: 0;
-  transition: opacity var(--dad-transition);
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-
-.dad-stat-clickable:hover::after {
-  opacity: 1;
-}
-
-.dad-stat-active-green {
-  border-color: var(--dad-green) !important;
-  box-shadow: 0 0 0 2px rgba(22, 163, 74, 0.15), var(--dad-shadow-md) !important;
-  background: #f0fdf4 !important;
-}
-
-.dad-stat-active-red {
-  border-color: var(--dad-red) !important;
-  box-shadow: 0 0 0 2px rgba(220, 38, 38, 0.15), var(--dad-shadow-md) !important;
-  background: #fef2f2 !important;
-}
-
-.dad-stat-active-orange {
-  border-color: var(--dad-orange) !important;
-  box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.15), var(--dad-shadow-md) !important;
-  background: #fffbeb !important;
-}
-
-.dad-stat-icon-live-assigned {
-  background: #ecfdf5;
-  color: var(--dad-green);
-}
-
-.dad-stat-icon-live-unassigned {
-  background: #fef2f2;
-  color: var(--dad-red);
-}
-
-.dad-stat-icon-live-switch {
-  background: #fffbeb;
-  color: var(--dad-orange);
-}
-
 /* ===== Controls Bar ===== */
 .dad-controls {
   display: flex;
@@ -1273,13 +1216,70 @@
   margin-left: 4px;
 }
 
-.dad-live-filter-label {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--dad-primary);
-  background: var(--dad-primary-light);
-  padding: 4px 14px;
+/* Live feed filter chips */
+.dad-live-filter-chips {
+  display: flex;
+  gap: 8px;
+}
+
+.dad-live-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 16px;
+  border: 1px solid var(--dad-border);
   border-radius: 100px;
+  background: var(--dad-card);
+  color: var(--dad-text-secondary);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: var(--dad-font);
+  transition: all var(--dad-transition);
+}
+
+.dad-live-chip:hover {
+  border-color: var(--dad-text-muted);
+  background: var(--dad-hover);
+}
+
+.dad-live-chip svg {
+  flex-shrink: 0;
+}
+
+.dad-live-chip-active {
+  background: var(--dad-primary);
+  color: white;
+  border-color: var(--dad-primary);
+}
+
+.dad-live-chip-active:hover {
+  background: var(--dad-primary-dark);
+  color: white;
+}
+
+.dad-live-chip-active-green {
+  background: var(--dad-green);
+  color: white;
+  border-color: var(--dad-green);
+}
+
+.dad-live-chip-active-green:hover {
+  background: var(--dad-green);
+  opacity: 0.9;
+  color: white;
+}
+
+.dad-live-chip-active-red {
+  background: var(--dad-red);
+  color: white;
+  border-color: var(--dad-red);
+}
+
+.dad-live-chip-active-red:hover {
+  background: var(--dad-red);
+  opacity: 0.9;
+  color: white;
 }
 
 .dad-live-empty {

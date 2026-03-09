@@ -1,11 +1,9 @@
-import React, { useState, useCallback } from "react";
-import { formatDate, driverDisplayName, toISODate } from "../helpers";
+import React, { useState } from "react";
+import { formatDate, driverDisplayName } from "../helpers";
 
-export default function DriverStoryboard({ drivers, devices, apiRef }) {
+export default function DriverStoryboard({ drivers, devices, driverChanges, apiRef }) {
   var [searchTerm, setSearchTerm] = useState("");
   var [selectedDrivers, setSelectedDrivers] = useState([]);
-  var [timelines, setTimelines] = useState({});
-  var [loadingIds, setLoadingIds] = useState({});
   var [showDropdown, setShowDropdown] = useState(false);
 
   // Filter drivers by search term
@@ -16,7 +14,6 @@ export default function DriverStoryboard({ drivers, devices, apiRef }) {
       var name = driverDisplayName(d).toLowerCase();
       return name.indexOf(term) !== -1;
     }).filter(function (d) {
-      // Exclude already-selected drivers
       for (var i = 0; i < selectedDrivers.length; i++) {
         if (selectedDrivers[i].id === d.id) return false;
       }
@@ -24,89 +21,40 @@ export default function DriverStoryboard({ drivers, devices, apiRef }) {
     }).slice(0, 8);
   }
 
-  function loadTimeline(driverId) {
-    var api = apiRef.current;
-    if (!api) return;
-
-    setLoadingIds(function (prev) {
-      var next = Object.assign({}, prev);
-      next[driverId] = true;
-      return next;
-    });
-
-    var now = new Date();
-    var ninetyDaysAgo = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
-
-    api.call("Get", {
-      typeName: "DriverChange",
-      search: {
-        userSearch: { id: driverId },
-        fromDate: ninetyDaysAgo.toISOString(),
-        toDate: now.toISOString(),
-        includeOverlappedChanges: true
+  // Build timeline from driverChanges (already loaded — 30 days of data)
+  function getTimeline(driverId) {
+    var changes = [];
+    driverChanges.forEach(function (dc) {
+      // Include records where this driver was assigned or unassigned
+      if (dc.driver && dc.driver.id === driverId) {
+        changes.push(dc);
       }
-    }, function (result) {
-      var sorted = (result || []).sort(function (a, b) {
-        return new Date(a.dateTime) - new Date(b.dateTime);
-      });
-      setTimelines(function (prev) {
-        var next = Object.assign({}, prev);
-        next[driverId] = sorted;
-        return next;
-      });
-      setLoadingIds(function (prev) {
-        var next = Object.assign({}, prev);
-        delete next[driverId];
-        return next;
-      });
-    }, function () {
-      setTimelines(function (prev) {
-        var next = Object.assign({}, prev);
-        next[driverId] = [];
-        return next;
-      });
-      setLoadingIds(function (prev) {
-        var next = Object.assign({}, prev);
-        delete next[driverId];
-        return next;
-      });
     });
+    // Sort chronologically (oldest first for story reading)
+    changes.sort(function (a, b) {
+      return new Date(a.dateTime) - new Date(b.dateTime);
+    });
+    return changes;
   }
 
   function addDriver(driver) {
     setSelectedDrivers(function (prev) { return prev.concat([driver]); });
     setSearchTerm("");
     setShowDropdown(false);
-    loadTimeline(driver.id);
   }
 
   function removeDriver(driverId) {
     setSelectedDrivers(function (prev) {
       return prev.filter(function (d) { return d.id !== driverId; });
     });
-    setTimelines(function (prev) {
-      var next = Object.assign({}, prev);
-      delete next[driverId];
-      return next;
-    });
   }
 
   function renderTimeline(driverId) {
-    var changes = timelines[driverId];
-    var isLoading = loadingIds[driverId];
+    var changes = getTimeline(driverId);
 
-    if (isLoading) {
+    if (changes.length === 0) {
       return (
-        <div className="dad-story-loading">
-          <div className="dad-spinner dad-spinner-sm"></div>
-          <span>Loading assignment history...</span>
-        </div>
-      );
-    }
-
-    if (!changes || changes.length === 0) {
-      return (
-        <div className="dad-story-empty">No assignment records found in the last 90 days.</div>
+        <div className="dad-story-empty">No assignment records found in the last 30 days.</div>
       );
     }
 
@@ -116,10 +64,6 @@ export default function DriverStoryboard({ drivers, devices, apiRef }) {
           var device = change.device ? devices[change.device.id] : null;
           var deviceName = device ? device.name : (change.device ? change.device.id : "Unknown");
           var isAssign = change.device && change.device.id && change.device.id !== "NoDeviceId";
-          var isUnknown = change.driver && change.driver.id === "UnknownDriverId";
-
-          // Skip displaying UnknownDriverId records as separate items — they're the vehicle-side mirror
-          if (isUnknown) return null;
 
           var actionText = isAssign ? "Assigned to" : "Unassigned from";
 
@@ -135,7 +79,6 @@ export default function DriverStoryboard({ drivers, devices, apiRef }) {
                 </div>
                 <div className="dad-story-event-time">{formatDate(change.dateTime)}</div>
               </div>
-              {idx < changes.length - 1 && <div className="dad-story-connector"></div>}
             </div>
           );
         })}
@@ -165,13 +108,14 @@ export default function DriverStoryboard({ drivers, devices, apiRef }) {
               type="text"
               className="dad-storyboard-search"
               placeholder="Search for a driver to view their story..."
+              autoComplete="off"
               value={searchTerm}
               onChange={function (e) {
                 setSearchTerm(e.target.value);
                 setShowDropdown(e.target.value.length >= 2);
               }}
               onFocus={function () { if (searchTerm.length >= 2) setShowDropdown(true); }}
-              onBlur={function () { setTimeout(function () { setShowDropdown(false); }, 200); }}
+              onBlur={function () { setTimeout(function () { setShowDropdown(false); }, 250); }}
             />
           </div>
           {showDropdown && searchResults.length > 0 && (
@@ -229,6 +173,7 @@ export default function DriverStoryboard({ drivers, devices, apiRef }) {
       ) : (
         <div className="dad-storyboard-stories">
           {selectedDrivers.map(function (driver) {
+            var timeline = getTimeline(driver.id);
             return (
               <div key={driver.id} className="dad-story-card">
                 <div className="dad-story-card-header">
@@ -237,7 +182,9 @@ export default function DriverStoryboard({ drivers, devices, apiRef }) {
                   </div>
                   <div className="dad-story-driver-info">
                     <div className="dad-story-driver-name">{driverDisplayName(driver)}</div>
-                    <div className="dad-story-driver-subtitle">Assignment history — last 90 days</div>
+                    <div className="dad-story-driver-subtitle">
+                      {timeline.length} events — last 30 days
+                    </div>
                   </div>
                   <button
                     className="dad-story-close"

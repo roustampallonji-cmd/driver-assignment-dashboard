@@ -7,11 +7,10 @@ import {
 
 function classifyChange(change) {
   var isUnknownDriver = change.driver && change.driver.id === "UnknownDriverId";
-  var hasRealDevice = change.device && change.device.id && change.device.id !== "NoDeviceId";
+  var isNoDevice = change.device && change.device.id === "NoDeviceId";
 
-  if (isUnknownDriver) return "unassign";
-  if (hasRealDevice) return "assign";
-  return "unassign";
+  if (isUnknownDriver || isNoDevice) return "unassign";
+  return "assign";
 }
 
 function resolveFeedItem(change, drivers, devices, driverChanges, rows) {
@@ -19,7 +18,6 @@ function resolveFeedItem(change, drivers, devices, driverChanges, rows) {
 
   var driverName;
   if (change.driver.id === "UnknownDriverId") {
-    // Vehicle-side unassignment — resolve the previous driver from DriverChange history
     driverName = findPreviousDriverForDevice(driverChanges, drivers, change.device.id, change.dateTime);
     if (!driverName) driverName = "Unknown Driver";
   } else {
@@ -36,7 +34,6 @@ function resolveFeedItem(change, drivers, devices, driverChanges, rows) {
     var device = devices[change.device.id];
     vehicleName = device ? device.name : (change.device ? change.device.id : "Unknown");
   } else {
-    // Unassign: for UnknownDriverId records, we have the device.id directly
     if (change.driver.id === "UnknownDriverId") {
       var dev = devices[change.device.id];
       vehicleName = dev ? dev.name : change.device.id;
@@ -103,38 +100,61 @@ function FeedItem({ change, drivers, devices, driverChanges, rows }) {
   );
 }
 
-export default function LiveFeed({ liveChanges, liveFeedFilter, drivers, devices, driverChanges, rows }) {
+export default function LiveFeed({
+  liveChanges, liveFeedFilter, onFilterChange,
+  liveAssignedCount, liveUnassignedCount,
+  drivers, devices, driverChanges, rows
+}) {
   // Apply filter if active
   var displayChanges = liveChanges;
   if (liveFeedFilter) {
     displayChanges = liveChanges.filter(function (change) {
-      var type = classifyChange(change);
-      return type === liveFeedFilter;
+      return classifyChange(change) === liveFeedFilter;
     });
   }
-
-  var filterLabel = liveFeedFilter === "assign" ? " — Assigned" :
-                    liveFeedFilter === "unassign" ? " — Unassigned" :
-                    liveFeedFilter === "switch" ? " — Driver Switch" : "";
 
   return (
     <div className="dad-live-wrap">
       <div className="dad-live-header">
         <div className="dad-live-title">
           <span className="dad-live-dot"></span>
-          Live Activity{filterLabel}
+          Live Activity
           <span className="dad-live-total-count">{displayChanges.length}</span>
         </div>
-        {liveFeedFilter && (
-          <span className="dad-live-filter-label">
-            Showing: {liveFeedFilter === "assign" ? "Assigned" : liveFeedFilter === "unassign" ? "Unassigned" : "Switches"} only
-          </span>
-        )}
+        <div className="dad-live-filter-chips">
+          <button
+            className={"dad-live-chip dad-live-chip-all" + (liveFeedFilter === null ? " dad-live-chip-active" : "")}
+            onClick={function () { onFilterChange(liveFeedFilter); }}
+          >
+            All ({liveChanges.length})
+          </button>
+          <button
+            className={"dad-live-chip dad-live-chip-assigned" + (liveFeedFilter === "assign" ? " dad-live-chip-active-green" : "")}
+            onClick={function () { onFilterChange("assign"); }}
+          >
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M22 11.08V12a10 10 0 11-5.93-9.14"/>
+              <polyline points="22 4 12 14.01 9 11.01"/>
+            </svg>
+            Assigned ({liveAssignedCount})
+          </button>
+          <button
+            className={"dad-live-chip dad-live-chip-unassigned" + (liveFeedFilter === "unassign" ? " dad-live-chip-active-red" : "")}
+            onClick={function () { onFilterChange("unassign"); }}
+          >
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2">
+              <circle cx="12" cy="12" r="10"/>
+              <line x1="15" y1="9" x2="9" y2="15"/>
+              <line x1="9" y1="9" x2="15" y2="15"/>
+            </svg>
+            Unassigned ({liveUnassignedCount})
+          </button>
+        </div>
       </div>
       <div className="dad-live-single-body">
         {displayChanges.length === 0 ? (
           <div className="dad-live-empty">
-            {liveFeedFilter ? "No " + (liveFeedFilter === "assign" ? "assigned" : liveFeedFilter === "unassign" ? "unassigned" : "switch") + " activity in the last 60 minutes" : "No activity in the last 60 minutes"}
+            {liveFeedFilter ? "No " + (liveFeedFilter === "assign" ? "assigned" : "unassigned") + " activity in the last 60 minutes" : "No activity in the last 60 minutes"}
           </div>
         ) : (
           <div className="dad-live-feed">

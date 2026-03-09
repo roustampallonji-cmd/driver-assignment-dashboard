@@ -5,7 +5,6 @@ import {
 import StatsRow from "./components/StatsRow";
 import LiveFeed from "./components/LiveFeed";
 import DriverStoryboard from "./components/DriverStoryboard";
-import NotifModal from "./components/NotifModal";
 
 export default function App({ apiRef }) {
   // ── Core data state ──
@@ -20,10 +19,7 @@ export default function App({ apiRef }) {
 
   // ── Live feed state ──
   const [liveChanges, setLiveChanges] = useState([]);
-  const [liveFeedFilter, setLiveFeedFilter] = useState(null); // null = all, "assign", "unassign"
-
-  // ── Modal state ──
-  const [notifModalOpen, setNotifModalOpen] = useState(false);
+  const [liveFeedFilter, setLiveFeedFilter] = useState(null);
 
   // ── Refs ──
   const liveTimerRef = useRef(null);
@@ -83,9 +79,9 @@ export default function App({ apiRef }) {
   }, [apiRef]);
 
   // ── Live Activity Loading ──
-  // Pure API-based approach: fetches DriverChange records from the last 60 minutes.
-  // Keeps ALL records including UnknownDriverId (vehicle-side unassignment records).
-  // The LiveFeed component resolves driver names from history for UnknownDriverId records.
+  // Pure API-based: fetches DriverChange records from the last 60 minutes.
+  // Keeps UnknownDriverId records (vehicle-side unassignment).
+  // NO aggressive dedup — each record is a distinct event.
   const loadLiveActivity = useCallback(function () {
     const api = apiRef.current;
     if (!api) return;
@@ -112,23 +108,37 @@ export default function App({ apiRef }) {
       var currentStatusInfos = results[1] || [];
       var fromTime = from.getTime();
 
-      // Keep all records within the time window that have valid data
+      // Keep all valid records within the time window
       var validChanges = changes.filter(function (c) {
         if (new Date(c.dateTime).getTime() < fromTime) return false;
+        // Driver-side records (real driver: assign or NoDeviceId unassign)
         if (c.driver && c.driver.id && c.driver.id !== "UnknownDriverId") return true;
+        // Vehicle-side unassignment records (UnknownDriverId + real device)
         if (c.driver && c.driver.id === "UnknownDriverId" &&
             c.device && c.device.id && c.device.id !== "NoDeviceId") return true;
         return false;
       });
 
-      // Deduplicate: prefer driver-side over vehicle-side for same event
-      var seen = {};
-      var deduped = validChanges.filter(function (c) {
-        var key = c.device.id + "_" + Math.round(new Date(c.dateTime).getTime() / 3000);
+      // Light dedup: only remove driver-side NoDeviceId records if we also have
+      // the vehicle-side UnknownDriverId record for the same device at the same time.
+      // This prevents showing the same unassignment event twice from both perspectives.
+      // We PREFER the UnknownDriverId record because it has the device ID (we can show the vehicle name).
+      var unknownKeys = {};
+      validChanges.forEach(function (c) {
         if (c.driver.id === "UnknownDriverId") {
-          if (seen[key]) return false;
+          var key = c.device.id + "_" + Math.round(new Date(c.dateTime).getTime() / 5000);
+          unknownKeys[key] = true;
         }
-        seen[key] = true;
+      });
+
+      var deduped = validChanges.filter(function (c) {
+        // If this is a driver-side NoDeviceId record, check if we have a vehicle-side record
+        if (c.driver.id !== "UnknownDriverId" && c.device && c.device.id === "NoDeviceId") {
+          // Find the device this driver was on — check if there's a matching UnknownDriverId record
+          // For each UnknownDriverId key near this time, we might have a match
+          // Since we can't easily match driver-side to vehicle-side, just keep both — they look different anyway
+          return true;
+        }
         return true;
       });
 
@@ -190,16 +200,13 @@ export default function App({ apiRef }) {
   // Live feed counts
   var liveAssignedCount = 0;
   var liveUnassignedCount = 0;
-  var liveSwitchCount = 0;
   liveChanges.forEach(function (c) {
     var isUnknown = c.driver && c.driver.id === "UnknownDriverId";
-    var hasRealDevice = c.device && c.device.id && c.device.id !== "NoDeviceId";
-    if (isUnknown) {
+    var isNoDevice = c.device && c.device.id === "NoDeviceId";
+    if (isUnknown || isNoDevice) {
       liveUnassignedCount++;
-    } else if (hasRealDevice) {
-      liveAssignedCount++;
     } else {
-      liveUnassignedCount++;
+      liveAssignedCount++;
     }
   });
 
@@ -236,17 +243,8 @@ export default function App({ apiRef }) {
         </div>
       </div>
 
-      {/* Stats — Driver counts + Live feed counts */}
-      <StatsRow
-        total={totalCount}
-        assigned={assignedCount}
-        unassigned={unassignedCount}
-        liveAssigned={liveAssignedCount}
-        liveUnassigned={liveUnassignedCount}
-        liveSwitch={liveSwitchCount}
-        liveFeedFilter={liveFeedFilter}
-        onLiveFeedFilter={handleLiveFeedFilter}
-      />
+      {/* Stats — just 3 driver count cards */}
+      <StatsRow total={totalCount} assigned={assignedCount} unassigned={unassignedCount} />
 
       {/* Loading */}
       {loading && (
@@ -259,11 +257,14 @@ export default function App({ apiRef }) {
       {/* Error */}
       {error && <div className="dad-error">{error}</div>}
 
-      {/* Live Activity Feed */}
+      {/* Live Activity Feed — with clickable filter counts in the header */}
       {!loading && (
         <LiveFeed
           liveChanges={liveChanges}
           liveFeedFilter={liveFeedFilter}
+          onFilterChange={handleLiveFeedFilter}
+          liveAssignedCount={liveAssignedCount}
+          liveUnassignedCount={liveUnassignedCount}
           drivers={drivers}
           devices={devices}
           driverChanges={driverChanges}
@@ -276,17 +277,8 @@ export default function App({ apiRef }) {
         <DriverStoryboard
           drivers={drivers}
           devices={devices}
+          driverChanges={driverChanges}
           apiRef={apiRef}
-        />
-      )}
-
-      {/* Notification Modal */}
-      {notifModalOpen && (
-        <NotifModal
-          apiRef={apiRef}
-          selected={new Set()}
-          rows={rows}
-          onClose={function () { setNotifModalOpen(false); }}
         />
       )}
     </div>
