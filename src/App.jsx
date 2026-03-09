@@ -43,7 +43,6 @@ export default function App({ apiRef }) {
 
   // ── Refs ──
   const liveTimerRef = useRef(null);
-  const dataTimerRef = useRef(null);
   const mountedRef = useRef(true);
   const liveLoadingRef = useRef(false); // guard against overlapping live polls
   const prevDriverToDeviceRef = useRef(null); // tracks driver→device for change detection
@@ -269,15 +268,14 @@ export default function App({ apiRef }) {
     };
   }, [loadLiveActivity]);
 
-  // ── Auto-refresh data (stats + table) every 30s ──
+  // ── Recompute rows when statusInfos changes (updated by live poll every 5s) ──
   useEffect(function () {
-    dataTimerRef.current = setInterval(function () {
-      if (mountedRef.current) loadData();
-    }, 30000);
-    return function () {
-      if (dataTimerRef.current) clearInterval(dataTimerRef.current);
-    };
-  }, [loadData]);
+    if (drivers.length > 0 && Object.keys(devices).length > 0) {
+      var processed = processDriverData(drivers, devices, statusInfos, driverChanges);
+      setRows(processed);
+      setLastRefresh(new Date());
+    }
+  }, [statusInfos, drivers, devices, driverChanges]);
 
   // ── Filtering & Sorting ──
   useEffect(function () {
