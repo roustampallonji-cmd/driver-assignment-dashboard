@@ -43,7 +43,9 @@ export default function App({ apiRef }) {
 
   // ── Refs ──
   const liveTimerRef = useRef(null);
+  const dataTimerRef = useRef(null);
   const mountedRef = useRef(true);
+  const liveLoadingRef = useRef(false); // guard against overlapping live polls
   const prevDriverToDeviceRef = useRef(null); // tracks driver→device for change detection
   const prevDeviceToDriverRef = useRef(null); // tracks device→driver for same-vehicle switch detection
 
@@ -109,6 +111,8 @@ export default function App({ apiRef }) {
   const loadLiveActivity = useCallback(function () {
     const api = apiRef.current;
     if (!api) return;
+    if (liveLoadingRef.current) return; // skip if previous poll still in-flight
+    liveLoadingRef.current = true;
 
     const now = new Date();
     const from = new Date(now.getTime() - liveMinutes * 60 * 1000);
@@ -241,9 +245,11 @@ export default function App({ apiRef }) {
 
       // Also update statusInfos so stats row reflects current state
       setStatusInfos(currentStatusInfos);
+      liveLoadingRef.current = false;
     }, function () {
       if (!mountedRef.current) return;
       setLiveChanges([]);
+      liveLoadingRef.current = false;
     });
   }, [apiRef, liveMinutes]);
 
@@ -254,14 +260,24 @@ export default function App({ apiRef }) {
     return function () { mountedRef.current = false; };
   }, [loadData]);
 
-  // ── Live feed timer ──
+  // ── Live feed timer (5s for near-instant detection) ──
   useEffect(function () {
     loadLiveActivity();
-    liveTimerRef.current = setInterval(loadLiveActivity, 15000);
+    liveTimerRef.current = setInterval(loadLiveActivity, 5000);
     return function () {
       if (liveTimerRef.current) clearInterval(liveTimerRef.current);
     };
   }, [loadLiveActivity]);
+
+  // ── Auto-refresh data (stats + table) every 30s ──
+  useEffect(function () {
+    dataTimerRef.current = setInterval(function () {
+      if (mountedRef.current) loadData();
+    }, 30000);
+    return function () {
+      if (dataTimerRef.current) clearInterval(dataTimerRef.current);
+    };
+  }, [loadData]);
 
   // ── Filtering & Sorting ──
   useEffect(function () {
