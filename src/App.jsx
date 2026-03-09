@@ -1,53 +1,34 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
-  processDriverData, getChildGroupIds, exportCSV,
-  formatDate, findDriverById, driverDisplayName,
-  findLastVehicleForDriver, findRowByDriverId
+  processDriverData, formatDate
 } from "./helpers";
 import StatsRow from "./components/StatsRow";
-import ControlsBar from "./components/ControlsBar";
-import ActionBar from "./components/ActionBar";
 import LiveFeed from "./components/LiveFeed";
-import DriverTable from "./components/DriverTable";
+import DriverStoryboard from "./components/DriverStoryboard";
 import NotifModal from "./components/NotifModal";
 
 export default function App({ apiRef }) {
   // ── Core data state ──
   const [drivers, setDrivers] = useState([]);
   const [devices, setDevices] = useState({});
-  const [groups, setGroups] = useState([]);
   const [statusInfos, setStatusInfos] = useState([]);
   const [driverChanges, setDriverChanges] = useState([]);
   const [rows, setRows] = useState([]);
-  const [filtered, setFiltered] = useState([]);
-
-  // ── UI state ──
-  const [selected, setSelected] = useState(new Set());
-  const [sortCol, setSortCol] = useState("name");
-  const [sortDir, setSortDir] = useState("asc");
-  const [searchTerm, setSearchTerm] = useState("");
-  const [groupFilter, setGroupFilter] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [lastRefresh, setLastRefresh] = useState(null);
 
   // ── Live feed state ──
   const [liveChanges, setLiveChanges] = useState([]);
-  const [liveMinutes, setLiveMinutes] = useState(5);
+  const [liveFeedFilter, setLiveFeedFilter] = useState(null); // null = all, "assign", "unassign"
 
   // ── Modal state ──
   const [notifModalOpen, setNotifModalOpen] = useState(false);
 
-  // ── Timeline state ──
-  const [timelineDriverId, setTimelineDriverId] = useState(null);
-
   // ── Refs ──
   const liveTimerRef = useRef(null);
   const mountedRef = useRef(true);
-  const liveLoadingRef = useRef(false); // guard against overlapping live polls
-  const prevDriverToDeviceRef = useRef(null); // tracks driver→device for change detection
-  const prevDeviceToDriverRef = useRef(null); // tracks device→driver for same-vehicle switch detection
-  const detectedEventsRef = useRef([]); // accumulates detected events across polls
+  const liveLoadingRef = useRef(false);
 
   // ── Data Loading ──
   const loadData = useCallback(function () {
@@ -64,7 +45,6 @@ export default function App({ apiRef }) {
       ["Get", { typeName: "User", search: { isDriver: true } }],
       ["Get", { typeName: "Device" }],
       ["Get", { typeName: "DeviceStatusInfo" }],
-      ["Get", { typeName: "Group" }],
       ["Get", {
         typeName: "DriverChange",
         search: {
@@ -81,8 +61,7 @@ export default function App({ apiRef }) {
       const drv = results[0] || [];
       const deviceList = results[1] || [];
       const si = results[2] || [];
-      const grp = results[3] || [];
-      const dc = results[4] || [];
+      const dc = results[3] || [];
 
       const deviceMap = {};
       deviceList.forEach(function (d) { deviceMap[d.id] = d; });
@@ -90,7 +69,6 @@ export default function App({ apiRef }) {
       setDrivers(drv);
       setDevices(deviceMap);
       setStatusInfos(si);
-      setGroups(grp);
       setDriverChanges(dc);
 
       const processed = processDriverData(drv, deviceMap, si, dc);
@@ -105,17 +83,17 @@ export default function App({ apiRef }) {
   }, [apiRef]);
 
   // ── Live Activity Loading ──
-  // Uses state-comparison approach: polls DeviceStatusInfo each cycle and
-  // compares with previous snapshot to detect assignments/unassignments.
-  // This is reliable even when DriverChange API doesn't return unassignment records.
+  // Pure API-based approach: fetches DriverChange records from the last 60 minutes.
+  // Keeps ALL records including UnknownDriverId (vehicle-side unassignment records).
+  // The LiveFeed component resolves driver names from history for UnknownDriverId records.
   const loadLiveActivity = useCallback(function () {
     const api = apiRef.current;
     if (!api) return;
-    if (liveLoadingRef.current) return; // skip if previous poll still in-flight
+    if (liveLoadingRef.current) return;
     liveLoadingRef.current = true;
 
-    const now = new Date();
-    const from = new Date(now.getTime() - liveMinutes * 60 * 1000);
+    var now = new Date();
+    var from = new Date(now.getTime() - 60 * 60 * 1000);
 
     api.multiCall([
       ["Get", {
@@ -132,119 +110,24 @@ export default function App({ apiRef }) {
 
       var changes = results[0] || [];
       var currentStatusInfos = results[1] || [];
+      var fromTime = from.getTime();
 
-      // Build current maps: driverId→deviceId and deviceId→driverId
-      var curDriverToDevice = {};
-      var curDeviceToDriver = {};
-      currentStatusInfos.forEach(function (si) {
-        if (si.driver && si.driver.id && si.driver.id !== "UnknownDriverId" &&
-            si.device && si.device.id && si.device.id !== "NoDeviceId") {
-          curDriverToDevice[si.driver.id] = si.device.id;
-          curDeviceToDriver[si.device.id] = si.driver.id;
-        }
+      // Keep all records within the time window that have valid data
+      var validChanges = changes.filter(function (c) {
+        if (new Date(c.dateTime).getTime() < fromTime) return false;
+        if (c.driver && c.driver.id && c.driver.id !== "UnknownDriverId") return true;
+        if (c.driver && c.driver.id === "UnknownDriverId" &&
+            c.device && c.device.id && c.device.id !== "NoDeviceId") return true;
+        return false;
       });
 
-      // Detect state changes by comparing with previous snapshot
-      var detectedEvents = [];
-      var prevD2D = prevDriverToDeviceRef.current;
-      var prevDev2Drv = prevDeviceToDriverRef.current;
-      if (prevD2D && prevDev2Drv) {
-        var nowISO = new Date().toISOString();
-        var switchedDriverIds = {};
-
-        // 1. Same driver moved to different vehicle
-        Object.keys(curDriverToDevice).forEach(function (driverId) {
-          if (prevD2D[driverId] && prevD2D[driverId] !== curDriverToDevice[driverId]) {
-            switchedDriverIds[driverId] = true;
-            detectedEvents.push({
-              id: "detected-switch-" + driverId + "-" + Date.now(),
-              dateTime: nowISO,
-              driver: { id: driverId },
-              device: { id: curDriverToDevice[driverId] },
-              _detectedType: "switch",
-              _previousDeviceId: prevD2D[driverId]
-            });
-          }
-        });
-
-        // 2. Same vehicle now has a different driver (Driver B replaced Driver A)
-        Object.keys(curDeviceToDriver).forEach(function (deviceId) {
-          if (prevDev2Drv[deviceId] && prevDev2Drv[deviceId] !== curDeviceToDriver[deviceId]) {
-            var newDriverId = curDeviceToDriver[deviceId];
-            var oldDriverId = prevDev2Drv[deviceId];
-            // Skip if already captured as a driver-move switch above
-            if (!switchedDriverIds[newDriverId]) {
-              detectedEvents.push({
-                id: "detected-vswitch-" + deviceId + "-" + Date.now(),
-                dateTime: nowISO,
-                driver: { id: newDriverId },
-                device: { id: deviceId },
-                _detectedType: "switch",
-                _previousDriverId: oldDriverId
-              });
-            }
-          }
-        });
-
-        // 3. Unassignments: driver was assigned, now isn't
-        Object.keys(prevD2D).forEach(function (driverId) {
-          if (!curDriverToDevice[driverId] && !switchedDriverIds[driverId]) {
-            detectedEvents.push({
-              id: "detected-unassign-" + driverId + "-" + Date.now(),
-              dateTime: nowISO,
-              driver: { id: driverId },
-              device: { id: "NoDeviceId" },
-              _detectedType: "unassign",
-              _previousDeviceId: prevD2D[driverId]
-            });
-          }
-        });
-
-        // 4. New assignments: driver wasn't assigned, now is
-        Object.keys(curDriverToDevice).forEach(function (driverId) {
-          if (!prevD2D[driverId] && !switchedDriverIds[driverId]) {
-            detectedEvents.push({
-              id: "detected-assign-" + driverId + "-" + Date.now(),
-              dateTime: nowISO,
-              driver: { id: driverId },
-              device: { id: curDriverToDevice[driverId] },
-              _detectedType: "assign"
-            });
-          }
-        });
-      }
-
-      // Update snapshots for next cycle
-      prevDriverToDeviceRef.current = curDriverToDevice;
-      prevDeviceToDriverRef.current = curDeviceToDriver;
-
-      // Accumulate new detected events into persistent ref
-      if (detectedEvents.length > 0) {
-        detectedEventsRef.current = detectedEventsRef.current.concat(detectedEvents);
-      }
-
-      // Prune old detected events outside the time window
-      detectedEventsRef.current = detectedEventsRef.current.filter(function (e) {
-        return new Date(e.dateTime).getTime() >= fromTime;
-      });
-
-      // Process DriverChange records from API
-      var apiEvents = changes
-        .filter(function (c) { return new Date(c.dateTime).getTime() >= fromTime; })
-        .filter(function (c) {
-          if (c.driver && c.driver.id && c.driver.id !== "UnknownDriverId") return true;
-          return false;
-        });
-
-      // Merge: accumulated detected events + API events, deduplicate
-      var allEvents = detectedEventsRef.current.concat(apiEvents);
+      // Deduplicate: prefer driver-side over vehicle-side for same event
       var seen = {};
-      var deduped = allEvents.filter(function (c) {
-        var dId = c.driver.id;
-        var devId = c.device.id;
-        var type = c._detectedType || (devId && devId !== "NoDeviceId" ? "assign" : "unassign");
-        var key = dId + "_" + type + "_" + Math.round(new Date(c.dateTime).getTime() / 5000);
-        if (seen[key]) return false;
+      var deduped = validChanges.filter(function (c) {
+        var key = c.device.id + "_" + Math.round(new Date(c.dateTime).getTime() / 3000);
+        if (c.driver.id === "UnknownDriverId") {
+          if (seen[key]) return false;
+        }
         seen[key] = true;
         return true;
       });
@@ -252,7 +135,7 @@ export default function App({ apiRef }) {
       deduped.sort(function (a, b) { return new Date(b.dateTime) - new Date(a.dateTime); });
       setLiveChanges(deduped);
 
-      // Also update statusInfos so stats row reflects current state
+      // Update statusInfos so stats reflect current state
       setStatusInfos(currentStatusInfos);
       liveLoadingRef.current = false;
     }, function () {
@@ -260,7 +143,7 @@ export default function App({ apiRef }) {
       setLiveChanges([]);
       liveLoadingRef.current = false;
     });
-  }, [apiRef, liveMinutes]);
+  }, [apiRef]);
 
   // ── Load on mount ──
   useEffect(function () {
@@ -269,7 +152,7 @@ export default function App({ apiRef }) {
     return function () { mountedRef.current = false; };
   }, [loadData]);
 
-  // ── Live feed timer (5s for near-instant detection) ──
+  // ── Live feed timer (5s) ──
   useEffect(function () {
     loadLiveActivity();
     liveTimerRef.current = setInterval(loadLiveActivity, 5000);
@@ -278,7 +161,7 @@ export default function App({ apiRef }) {
     };
   }, [loadLiveActivity]);
 
-  // ── Recompute rows when statusInfos changes (updated by live poll every 5s) ──
+  // ── Recompute rows when statusInfos changes ──
   useEffect(function () {
     if (drivers.length > 0 && Object.keys(devices).length > 0) {
       var processed = processDriverData(drivers, devices, statusInfos, driverChanges);
@@ -287,105 +170,38 @@ export default function App({ apiRef }) {
     }
   }, [statusInfos, drivers, devices, driverChanges]);
 
-  // ── Filtering & Sorting ──
-  useEffect(function () {
-    let result = rows;
-
-    // Search filter
-    if (searchTerm) {
-      const term = searchTerm.toLowerCase();
-      result = result.filter(function (row) {
-        return row.name.toLowerCase().indexOf(term) !== -1;
-      });
-    }
-
-    // Group filter
-    if (groupFilter) {
-      const childIds = getChildGroupIds(groups, groupFilter);
-      result = result.filter(function (row) {
-        for (let i = 0; i < row.groups.length; i++) {
-          if (childIds.indexOf(row.groups[i]) !== -1) return true;
-        }
-        return false;
-      });
-    }
-
-    // Sort
-    const dir = sortDir === "asc" ? 1 : -1;
-    result = [...result].sort(function (a, b) {
-      let va = a[sortCol] || "";
-      let vb = b[sortCol] || "";
-
-      if (sortCol === "assignedSince" || sortCol === "unassignedAt") {
-        va = va ? new Date(va).getTime() : 0;
-        vb = vb ? new Date(vb).getTime() : 0;
-        return (va - vb) * dir;
-      }
-
-      if (typeof va === "string") va = va.toLowerCase();
-      if (typeof vb === "string") vb = vb.toLowerCase();
-      if (va < vb) return -1 * dir;
-      if (va > vb) return 1 * dir;
-      return 0;
-    });
-
-    setFiltered(result);
-  }, [rows, searchTerm, groupFilter, sortCol, sortDir, groups]);
-
   // ── Handlers ──
-  function handleSort(col) {
-    if (sortCol === col) {
-      setSortDir(sortDir === "asc" ? "desc" : "asc");
-    } else {
-      setSortCol(col);
-      setSortDir("asc");
-    }
-  }
-
-  function handleToggleRow(id) {
-    setSelected(function (prev) {
-      const next = new Set(prev);
-      if (next.has(id)) {
-        next.delete(id);
-      } else {
-        next.add(id);
-      }
-      return next;
-    });
-  }
-
-  function handleSelectAll(checked) {
-    if (checked) {
-      setSelected(new Set(filtered.map(function (r) { return r.id; })));
-    } else {
-      setSelected(new Set());
-    }
-  }
-
-  function handleClearSelection() {
-    setSelected(new Set());
-  }
-
-  function handleExport() {
-    const exportRows = filtered.filter(function (r) { return selected.has(r.id); });
-    exportCSV(exportRows.length > 0 ? exportRows : filtered);
-  }
-
   function handleRefresh() {
-    setSelected(new Set());
-    setTimelineDriverId(null);
     loadData();
     loadLiveActivity();
   }
 
-  function handleLiveMinutesChange(minutes) {
-    setLiveMinutes(minutes);
+  function handleLiveFeedFilter(type) {
+    setLiveFeedFilter(function (prev) {
+      return prev === type ? null : type;
+    });
   }
 
   // ── Computed ──
-  const totalCount = filtered.length;
-  const assignedCount = filtered.filter(function (r) { return r.status === "Assigned"; }).length;
+  const totalCount = rows.length;
+  const assignedCount = rows.filter(function (r) { return r.status === "Assigned"; }).length;
   const unassignedCount = totalCount - assignedCount;
+
+  // Live feed counts
+  var liveAssignedCount = 0;
+  var liveUnassignedCount = 0;
+  var liveSwitchCount = 0;
+  liveChanges.forEach(function (c) {
+    var isUnknown = c.driver && c.driver.id === "UnknownDriverId";
+    var hasRealDevice = c.device && c.device.id && c.device.id !== "NoDeviceId";
+    if (isUnknown) {
+      liveUnassignedCount++;
+    } else if (hasRealDevice) {
+      liveAssignedCount++;
+    } else {
+      liveUnassignedCount++;
+    }
+  });
 
   return (
     <div className="dad-app">
@@ -420,24 +236,16 @@ export default function App({ apiRef }) {
         </div>
       </div>
 
-      {/* Stats */}
-      <StatsRow total={totalCount} assigned={assignedCount} unassigned={unassignedCount} />
-
-      {/* Controls */}
-      <ControlsBar
-        searchTerm={searchTerm}
-        onSearchChange={setSearchTerm}
-        groupFilter={groupFilter}
-        onGroupFilterChange={setGroupFilter}
-        groups={groups}
-      />
-
-      {/* Action Bar */}
-      <ActionBar
-        selectedCount={selected.size}
-        onNotifications={function () { setNotifModalOpen(true); }}
-        onExport={handleExport}
-        onClear={handleClearSelection}
+      {/* Stats — Driver counts + Live feed counts */}
+      <StatsRow
+        total={totalCount}
+        assigned={assignedCount}
+        unassigned={unassignedCount}
+        liveAssigned={liveAssignedCount}
+        liveUnassigned={liveUnassignedCount}
+        liveSwitch={liveSwitchCount}
+        liveFeedFilter={liveFeedFilter}
+        onLiveFeedFilter={handleLiveFeedFilter}
       />
 
       {/* Loading */}
@@ -455,8 +263,7 @@ export default function App({ apiRef }) {
       {!loading && (
         <LiveFeed
           liveChanges={liveChanges}
-          liveMinutes={liveMinutes}
-          onMinutesChange={handleLiveMinutesChange}
+          liveFeedFilter={liveFeedFilter}
           drivers={drivers}
           devices={devices}
           driverChanges={driverChanges}
@@ -464,20 +271,12 @@ export default function App({ apiRef }) {
         />
       )}
 
-      {/* Driver Table */}
+      {/* Driver Storyboard */}
       {!loading && (
-        <DriverTable
-          filtered={filtered}
-          selected={selected}
-          sortCol={sortCol}
-          sortDir={sortDir}
-          onSort={handleSort}
-          onToggleRow={handleToggleRow}
-          onSelectAll={handleSelectAll}
-          timelineDriverId={timelineDriverId}
-          onToggleTimeline={setTimelineDriverId}
-          apiRef={apiRef}
+        <DriverStoryboard
+          drivers={drivers}
           devices={devices}
+          apiRef={apiRef}
         />
       )}
 
@@ -485,7 +284,7 @@ export default function App({ apiRef }) {
       {notifModalOpen && (
         <NotifModal
           apiRef={apiRef}
-          selected={selected}
+          selected={new Set()}
           rows={rows}
           onClose={function () { setNotifModalOpen(false); }}
         />

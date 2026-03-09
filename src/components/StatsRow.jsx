@@ -1,8 +1,13 @@
 import React from "react";
 
-export default function StatsRow({ total, assigned, unassigned }) {
+export default function StatsRow({
+  total, assigned, unassigned,
+  liveAssigned, liveUnassigned, liveSwitch,
+  liveFeedFilter, onLiveFeedFilter
+}) {
   return (
     <div className="dad-stats">
+      {/* Driver counts */}
       <div className="dad-stat-card">
         <div className="dad-stat-icon dad-stat-icon-total">
           <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" strokeWidth="2">
@@ -40,6 +45,59 @@ export default function StatsRow({ total, assigned, unassigned }) {
         <div className="dad-stat-info">
           <span className="dad-stat-value">{unassigned}</span>
           <span className="dad-stat-label">Unassigned</span>
+        </div>
+      </div>
+
+      {/* Live feed activity counts — clickable to filter */}
+      <div
+        className={"dad-stat-card dad-stat-clickable" + (liveFeedFilter === "assign" ? " dad-stat-active-green" : "")}
+        onClick={function () { onLiveFeedFilter("assign"); }}
+        title="Click to filter live feed"
+      >
+        <div className="dad-stat-icon dad-stat-icon-live-assigned">
+          <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M22 11.08V12a10 10 0 11-5.93-9.14"/>
+            <polyline points="22 4 12 14.01 9 11.01"/>
+          </svg>
+        </div>
+        <div className="dad-stat-info">
+          <span className="dad-stat-value">{liveAssigned || 0}</span>
+          <span className="dad-stat-label">Live Assigned</span>
+        </div>
+      </div>
+      <div
+        className={"dad-stat-card dad-stat-clickable" + (liveFeedFilter === "unassign" ? " dad-stat-active-red" : "")}
+        onClick={function () { onLiveFeedFilter("unassign"); }}
+        title="Click to filter live feed"
+      >
+        <div className="dad-stat-icon dad-stat-icon-live-unassigned">
+          <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" strokeWidth="2">
+            <circle cx="12" cy="12" r="10"/>
+            <line x1="15" y1="9" x2="9" y2="15"/>
+            <line x1="9" y1="9" x2="15" y2="15"/>
+          </svg>
+        </div>
+        <div className="dad-stat-info">
+          <span className="dad-stat-value">{liveUnassigned || 0}</span>
+          <span className="dad-stat-label">Live Unassigned</span>
+        </div>
+      </div>
+      <div
+        className={"dad-stat-card dad-stat-clickable" + (liveFeedFilter === "switch" ? " dad-stat-active-orange" : "")}
+        onClick={function () { onLiveFeedFilter("switch"); }}
+        title="Click to filter live feed"
+      >
+        <div className="dad-stat-icon dad-stat-icon-live-switch">
+          <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" strokeWidth="2">
+            <polyline points="17 1 21 5 17 9"/>
+            <path d="M3 11V9a4 4 0 014-4h14"/>
+            <polyline points="7 23 3 19 7 15"/>
+            <path d="M21 13v2a4 4 0 01-4 4H3"/>
+          </svg>
+        </div>
+        <div className="dad-stat-info">
+          <span className="dad-stat-value">{liveSwitch || 0}</span>
+          <span className="dad-stat-label">Live Switch</span>
         </div>
       </div>
     </div>
