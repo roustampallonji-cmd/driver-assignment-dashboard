@@ -44,7 +44,8 @@ export default function App({ apiRef }) {
   // ── Refs ──
   const liveTimerRef = useRef(null);
   const mountedRef = useRef(true);
-  const prevAssignMapRef = useRef(null); // tracks driver→device assignment state for change detection
+  const prevDriverToDeviceRef = useRef(null); // tracks driver→device for change detection
+  const prevDeviceToDriverRef = useRef(null); // tracks device→driver for same-vehicle switch detection
 
   // ── Data Loading ──
   const loadData = useCallback(function () {
@@ -128,65 +129,90 @@ export default function App({ apiRef }) {
       var changes = results[0] || [];
       var currentStatusInfos = results[1] || [];
 
-      // Build current assignment map: driverId → deviceId
-      var currentAssignMap = {};
+      // Build current maps: driverId→deviceId and deviceId→driverId
+      var curDriverToDevice = {};
+      var curDeviceToDriver = {};
       currentStatusInfos.forEach(function (si) {
         if (si.driver && si.driver.id && si.driver.id !== "UnknownDriverId" &&
             si.device && si.device.id && si.device.id !== "NoDeviceId") {
-          currentAssignMap[si.driver.id] = si.device.id;
+          curDriverToDevice[si.driver.id] = si.device.id;
+          curDeviceToDriver[si.device.id] = si.driver.id;
         }
       });
 
       // Detect state changes by comparing with previous snapshot
       var detectedEvents = [];
-      var prevMap = prevAssignMapRef.current;
-      if (prevMap) {
+      var prevD2D = prevDriverToDeviceRef.current;
+      var prevDev2Drv = prevDeviceToDriverRef.current;
+      if (prevD2D && prevDev2Drv) {
         var nowISO = new Date().toISOString();
+        var switchedDriverIds = {};
 
-        // Check for unassignments: driver was in prevMap but not in currentAssignMap
-        Object.keys(prevMap).forEach(function (driverId) {
-          if (!currentAssignMap[driverId]) {
+        // 1. Same driver moved to different vehicle
+        Object.keys(curDriverToDevice).forEach(function (driverId) {
+          if (prevD2D[driverId] && prevD2D[driverId] !== curDriverToDevice[driverId]) {
+            switchedDriverIds[driverId] = true;
+            detectedEvents.push({
+              id: "detected-switch-" + driverId + "-" + Date.now(),
+              dateTime: nowISO,
+              driver: { id: driverId },
+              device: { id: curDriverToDevice[driverId] },
+              _detectedType: "switch",
+              _previousDeviceId: prevD2D[driverId]
+            });
+          }
+        });
+
+        // 2. Same vehicle now has a different driver (Driver B replaced Driver A)
+        Object.keys(curDeviceToDriver).forEach(function (deviceId) {
+          if (prevDev2Drv[deviceId] && prevDev2Drv[deviceId] !== curDeviceToDriver[deviceId]) {
+            var newDriverId = curDeviceToDriver[deviceId];
+            var oldDriverId = prevDev2Drv[deviceId];
+            // Skip if already captured as a driver-move switch above
+            if (!switchedDriverIds[newDriverId]) {
+              detectedEvents.push({
+                id: "detected-vswitch-" + deviceId + "-" + Date.now(),
+                dateTime: nowISO,
+                driver: { id: newDriverId },
+                device: { id: deviceId },
+                _detectedType: "switch",
+                _previousDriverId: oldDriverId
+              });
+            }
+          }
+        });
+
+        // 3. Unassignments: driver was assigned, now isn't
+        Object.keys(prevD2D).forEach(function (driverId) {
+          if (!curDriverToDevice[driverId] && !switchedDriverIds[driverId]) {
             detectedEvents.push({
               id: "detected-unassign-" + driverId + "-" + Date.now(),
               dateTime: nowISO,
               driver: { id: driverId },
               device: { id: "NoDeviceId" },
               _detectedType: "unassign",
-              _previousDeviceId: prevMap[driverId]
+              _previousDeviceId: prevD2D[driverId]
             });
           }
         });
 
-        // Check for new assignments: driver in currentAssignMap but not in prevMap
-        Object.keys(currentAssignMap).forEach(function (driverId) {
-          if (!prevMap[driverId]) {
+        // 4. New assignments: driver wasn't assigned, now is
+        Object.keys(curDriverToDevice).forEach(function (driverId) {
+          if (!prevD2D[driverId] && !switchedDriverIds[driverId]) {
             detectedEvents.push({
               id: "detected-assign-" + driverId + "-" + Date.now(),
               dateTime: nowISO,
               driver: { id: driverId },
-              device: { id: currentAssignMap[driverId] },
+              device: { id: curDriverToDevice[driverId] },
               _detectedType: "assign"
-            });
-          }
-        });
-
-        // Check for driver switches: driver in both but different device
-        Object.keys(currentAssignMap).forEach(function (driverId) {
-          if (prevMap[driverId] && prevMap[driverId] !== currentAssignMap[driverId]) {
-            detectedEvents.push({
-              id: "detected-switch-" + driverId + "-" + Date.now(),
-              dateTime: nowISO,
-              driver: { id: driverId },
-              device: { id: currentAssignMap[driverId] },
-              _detectedType: "switch",
-              _previousDeviceId: prevMap[driverId]
             });
           }
         });
       }
 
-      // Update snapshot for next cycle
-      prevAssignMapRef.current = currentAssignMap;
+      // Update snapshots for next cycle
+      prevDriverToDeviceRef.current = curDriverToDevice;
+      prevDeviceToDriverRef.current = curDeviceToDriver;
 
       // Process DriverChange records (existing approach)
       var fromTime = from.getTime();

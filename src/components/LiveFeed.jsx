@@ -61,18 +61,32 @@ function resolveFeedItem(change, drivers, devices, driverChanges, rows) {
     }
   }
 
-  // For switch events, also resolve previous vehicle
+  // For switch events, resolve previous vehicle or previous driver
   var previousVehicleName = null;
-  if (type === "switch" && change._previousDeviceId) {
-    var prevDevice = devices[change._previousDeviceId];
-    previousVehicleName = prevDevice ? prevDevice.name : change._previousDeviceId;
+  var previousDriverName = null;
+  if (type === "switch") {
+    if (change._previousDeviceId) {
+      // Driver moved from one vehicle to another
+      var prevDevice = devices[change._previousDeviceId];
+      previousVehicleName = prevDevice ? prevDevice.name : change._previousDeviceId;
+    }
+    if (change._previousDriverId) {
+      // Different driver replaced another on the same vehicle
+      var prevDriver = findDriverById(drivers, change._previousDriverId);
+      previousDriverName = prevDriver ? driverDisplayName(prevDriver) : "";
+      if (!previousDriverName) {
+        var prevRow = findRowByDriverId(rows, change._previousDriverId);
+        previousDriverName = prevRow ? prevRow.name : change._previousDriverId;
+      }
+    }
   }
 
   return {
     type: type,
     driverName: driverName,
     vehicleName: vehicleName,
-    previousVehicleName: previousVehicleName
+    previousVehicleName: previousVehicleName,
+    previousDriverName: previousDriverName
   };
 }
 
@@ -82,6 +96,8 @@ function FeedItem({ change, drivers, devices, driverChanges, rows }) {
   var driverName = resolved.driverName;
   var vehicleName = resolved.vehicleName;
   var previousVehicleName = resolved.previousVehicleName;
+  var previousDriverName = resolved.previousDriverName;
+  var isSameVehicleSwitch = type === "switch" && previousDriverName;
 
   var iconClass = type === "assign" ? "dad-live-icon-assign" :
                   type === "switch" ? "dad-live-icon-switch" :
@@ -112,16 +128,27 @@ function FeedItem({ change, drivers, devices, driverChanges, rows }) {
       </div>
       <div className="dad-live-details">
         <div className="dad-live-message">
-          <strong>{driverName}</strong>{" "}
           {type === "switch" ? (
-            <>
-              <span className="dad-live-switched">switched from</span>{" "}
-              <strong>{previousVehicleName || "Unknown"}</strong>{" "}
-              <span className="dad-live-switched">to</span>{" "}
-              <strong>{vehicleName}</strong>
-            </>
+            isSameVehicleSwitch ? (
+              <>
+                <strong>{driverName}</strong>{" "}
+                <span className="dad-live-switched">replaced</span>{" "}
+                <strong>{previousDriverName}</strong>{" "}
+                <span className="dad-live-switched">on</span>{" "}
+                <strong>{vehicleName}</strong>
+              </>
+            ) : (
+              <>
+                <strong>{driverName}</strong>{" "}
+                <span className="dad-live-switched">switched from</span>{" "}
+                <strong>{previousVehicleName || "Unknown"}</strong>{" "}
+                <span className="dad-live-switched">to</span>{" "}
+                <strong>{vehicleName}</strong>
+              </>
+            )
           ) : (
             <>
+              <strong>{driverName}</strong>{" "}
               <span className={type === "assign" ? "dad-live-assigned-to" : "dad-live-removed"}>
                 {type === "assign" ? "assigned to" : "unassigned from"}
               </span>{" "}
@@ -131,10 +158,24 @@ function FeedItem({ change, drivers, devices, driverChanges, rows }) {
         </div>
         <div className="dad-live-meta">
           <span className="dad-live-meta-item">
-            <span className="dad-live-meta-label">
-              {type === "switch" ? "New Vehicle:" : "Vehicle:"}
-            </span> {vehicleName}
+            <span className="dad-live-meta-label">Vehicle:</span> {vehicleName}
           </span>
+          {isSameVehicleSwitch && (
+            <>
+              <span className="dad-live-meta-sep"></span>
+              <span className="dad-live-meta-item">
+                <span className="dad-live-meta-label">Replaced:</span> {previousDriverName}
+              </span>
+            </>
+          )}
+          {previousVehicleName && !isSameVehicleSwitch && (
+            <>
+              <span className="dad-live-meta-sep"></span>
+              <span className="dad-live-meta-item">
+                <span className="dad-live-meta-label">Previous:</span> {previousVehicleName}
+              </span>
+            </>
+          )}
           <span className="dad-live-meta-sep"></span>
           <span className="dad-live-meta-item">
             <span className="dad-live-meta-label">
