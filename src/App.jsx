@@ -117,13 +117,29 @@ export default function App({ apiRef }) {
       }
     }, function (changes) {
       if (!mountedRef.current) return;
-      // Bug fix: client-side post-filter for overlapped entries
+      // Client-side post-filter for overlapped entries
       const fromTime = from.getTime();
-      const filtered = (changes || [])
+      const sorted = (changes || [])
         .filter(function (c) { return new Date(c.dateTime).getTime() >= fromTime; })
-        .filter(function (c) { return c.driver && c.driver.id && c.driver.id !== "UnknownDriverId"; })
+        .filter(function (c) {
+          // Keep driver-side records (both assign and unassign via NoDeviceId)
+          if (c.driver && c.driver.id && c.driver.id !== "UnknownDriverId") return true;
+          // Keep vehicle-side unassignment records (UnknownDriverId + real device)
+          if (c.driver && c.driver.id === "UnknownDriverId" && c.device && c.device.id && c.device.id !== "NoDeviceId") return true;
+          return false;
+        })
         .sort(function (a, b) { return new Date(b.dateTime) - new Date(a.dateTime); });
-      setLiveChanges(filtered);
+      // Deduplicate: prefer driver-side over vehicle-side for same device+time
+      var seen = {};
+      var deduped = sorted.filter(function (c) {
+        var key = c.device.id + "_" + Math.round(new Date(c.dateTime).getTime() / 2000);
+        if (c.driver.id === "UnknownDriverId") {
+          if (seen[key]) return false;
+        }
+        seen[key] = true;
+        return true;
+      });
+      setLiveChanges(deduped);
     }, function () {
       if (!mountedRef.current) return;
       setLiveChanges([]);
@@ -140,7 +156,7 @@ export default function App({ apiRef }) {
   // ── Live feed timer ──
   useEffect(function () {
     loadLiveActivity();
-    liveTimerRef.current = setInterval(loadLiveActivity, 30000);
+    liveTimerRef.current = setInterval(loadLiveActivity, 15000);
     return function () {
       if (liveTimerRef.current) clearInterval(liveTimerRef.current);
     };
@@ -234,6 +250,7 @@ export default function App({ apiRef }) {
     setSelected(new Set());
     setTimelineDriverId(null);
     loadData();
+    loadLiveActivity();
   }
 
   function handleLiveMinutesChange(minutes) {

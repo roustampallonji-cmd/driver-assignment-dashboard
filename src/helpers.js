@@ -86,6 +86,28 @@ export function findLastVehicleForDriver(driverChanges, devices, rows, driverId,
   return 'Unknown Vehicle';
 }
 
+export function findPreviousDriverForDevice(driverChanges, drivers, deviceId, beforeDateTime) {
+  var lastAssign = null;
+  var beforeTime = new Date(beforeDateTime).getTime();
+  driverChanges.forEach(function (dc) {
+    if (dc.device && dc.device.id === deviceId &&
+        dc.driver && dc.driver.id && dc.driver.id !== 'UnknownDriverId' &&
+        dc.device.id !== 'NoDeviceId') {
+      var dcTime = new Date(dc.dateTime).getTime();
+      if (dcTime < beforeTime) {
+        if (!lastAssign || dcTime > new Date(lastAssign.dateTime).getTime()) {
+          lastAssign = dc;
+        }
+      }
+    }
+  });
+  if (lastAssign) {
+    var driver = findDriverById(drivers, lastAssign.driver.id);
+    return driver ? driverDisplayName(driver) : lastAssign.driver.id;
+  }
+  return null;
+}
+
 export function getChildGroupIds(groups, parentId) {
   var ids = [parentId];
   groups.forEach(function (g) {
