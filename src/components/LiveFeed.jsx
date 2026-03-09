@@ -5,19 +5,33 @@ import {
   findPreviousDriverForDevice
 } from "../helpers";
 
-const TIME_FILTERS = [
+var TIME_FILTERS = [
   { minutes: 5, label: "5 min" },
   { minutes: 15, label: "15 min" },
   { minutes: 30, label: "30 min" },
   { minutes: 60, label: "1 hr" }
 ];
 
-function resolveFeedItem(change, drivers, devices, driverChanges, rows) {
+function classifyChange(change) {
+  // Detected events have explicit type
+  if (change._detectedType === "switch") return "switch";
+  if (change._detectedType === "unassign") return "unassign";
+  if (change._detectedType === "assign") return "assign";
+
+  // API DriverChange records
   var isUnknownDriver = change.driver.id === "UnknownDriverId";
-  var isAssign = !isUnknownDriver && change.device && change.device.id && change.device.id !== "NoDeviceId";
+  var hasRealDevice = change.device && change.device.id && change.device.id !== "NoDeviceId";
+
+  if (isUnknownDriver) return "unassign";
+  if (hasRealDevice) return "assign";
+  return "unassign";
+}
+
+function resolveFeedItem(change, drivers, devices, driverChanges, rows) {
+  var type = classifyChange(change);
 
   var driverName;
-  if (isUnknownDriver) {
+  if (change.driver.id === "UnknownDriverId") {
     driverName = findPreviousDriverForDevice(driverChanges, drivers, change.device.id, change.dateTime);
     if (!driverName) driverName = "Unknown Driver";
   } else {
@@ -30,32 +44,63 @@ function resolveFeedItem(change, drivers, devices, driverChanges, rows) {
   }
 
   var vehicleName;
-  if (isUnknownDriver) {
+  if (type === "switch") {
+    // Current vehicle (new assignment)
     var dev = devices[change.device.id];
     vehicleName = dev ? dev.name : change.device.id;
-  } else if (isAssign) {
+  } else if (type === "assign") {
     var device = devices[change.device.id];
     vehicleName = device ? device.name : (change.device ? change.device.id : "Unknown");
   } else {
-    vehicleName = findLastVehicleForDriver(driverChanges, devices, rows, change.driver.id, change.dateTime);
+    // Unassign: use _previousDeviceId if available, else look up from history
+    if (change._previousDeviceId) {
+      var prevDev = devices[change._previousDeviceId];
+      vehicleName = prevDev ? prevDev.name : change._previousDeviceId;
+    } else {
+      vehicleName = findLastVehicleForDriver(driverChanges, devices, rows, change.driver.id, change.dateTime);
+    }
   }
 
-  return { isAssign: isAssign, driverName: driverName, vehicleName: vehicleName };
+  // For switch events, also resolve previous vehicle
+  var previousVehicleName = null;
+  if (type === "switch" && change._previousDeviceId) {
+    var prevDevice = devices[change._previousDeviceId];
+    previousVehicleName = prevDevice ? prevDevice.name : change._previousDeviceId;
+  }
+
+  return {
+    type: type,
+    driverName: driverName,
+    vehicleName: vehicleName,
+    previousVehicleName: previousVehicleName
+  };
 }
 
 function FeedItem({ change, drivers, devices, driverChanges, rows }) {
   var resolved = resolveFeedItem(change, drivers, devices, driverChanges, rows);
-  var isAssign = resolved.isAssign;
+  var type = resolved.type;
   var driverName = resolved.driverName;
   var vehicleName = resolved.vehicleName;
+  var previousVehicleName = resolved.previousVehicleName;
+
+  var iconClass = type === "assign" ? "dad-live-icon-assign" :
+                  type === "switch" ? "dad-live-icon-switch" :
+                  "dad-live-icon-unassign";
 
   return (
     <div className="dad-live-item">
-      <div className={"dad-live-icon " + (isAssign ? "dad-live-icon-assign" : "dad-live-icon-unassign")}>
-        {isAssign ? (
+      <div className={"dad-live-icon " + iconClass}>
+        {type === "assign" ? (
           <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2">
             <path d="M22 11.08V12a10 10 0 11-5.93-9.14"/>
             <polyline points="22 4 12 14.01 9 11.01"/>
+          </svg>
+        ) : type === "switch" ? (
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2">
+            <polyline points="17 1 21 5 17 9"/>
+            <path d="M3 11V9a4 4 0 014-4h14"/>
+            <polyline points="7 23 3 19 7 15"/>
+            <path d="M21 13v2a4 4 0 01-4 4H3"/>
           </svg>
         ) : (
           <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2">
@@ -68,18 +113,33 @@ function FeedItem({ change, drivers, devices, driverChanges, rows }) {
       <div className="dad-live-details">
         <div className="dad-live-message">
           <strong>{driverName}</strong>{" "}
-          <span className={isAssign ? "dad-live-assigned-to" : "dad-live-removed"}>
-            {isAssign ? "assigned to" : "unassigned from"}
-          </span>{" "}
-          <strong>{vehicleName}</strong>
+          {type === "switch" ? (
+            <>
+              <span className="dad-live-switched">switched from</span>{" "}
+              <strong>{previousVehicleName || "Unknown"}</strong>{" "}
+              <span className="dad-live-switched">to</span>{" "}
+              <strong>{vehicleName}</strong>
+            </>
+          ) : (
+            <>
+              <span className={type === "assign" ? "dad-live-assigned-to" : "dad-live-removed"}>
+                {type === "assign" ? "assigned to" : "unassigned from"}
+              </span>{" "}
+              <strong>{vehicleName}</strong>
+            </>
+          )}
         </div>
         <div className="dad-live-meta">
           <span className="dad-live-meta-item">
-            <span className="dad-live-meta-label">Vehicle:</span> {vehicleName}
+            <span className="dad-live-meta-label">
+              {type === "switch" ? "New Vehicle:" : "Vehicle:"}
+            </span> {vehicleName}
           </span>
           <span className="dad-live-meta-sep"></span>
           <span className="dad-live-meta-item">
-            <span className="dad-live-meta-label">{isAssign ? "Assigned:" : "Unassigned at:"}</span> {formatDate(change.dateTime)}
+            <span className="dad-live-meta-label">
+              {type === "assign" ? "Assigned:" : type === "switch" ? "Switched:" : "Unassigned at:"}
+            </span> {formatDate(change.dateTime)}
           </span>
         </div>
       </div>
@@ -90,16 +150,49 @@ function FeedItem({ change, drivers, devices, driverChanges, rows }) {
   );
 }
 
+function FeedColumn({ title, icon, changes, headerClass, emptyText, drivers, devices, driverChanges, rows, keyPrefix }) {
+  return (
+    <div className="dad-live-column">
+      <div className={"dad-live-column-header " + headerClass}>
+        {icon}
+        <span>{title}</span>
+        <span className="dad-live-column-count">{changes.length}</span>
+      </div>
+      <div className="dad-live-column-body">
+        {changes.length === 0 ? (
+          <div className="dad-live-empty">{emptyText}</div>
+        ) : (
+          <div className="dad-live-feed">
+            {changes.map(function (change, idx) {
+              return (
+                <FeedItem
+                  key={change.id || (keyPrefix + "-" + idx)}
+                  change={change}
+                  drivers={drivers}
+                  devices={devices}
+                  driverChanges={driverChanges}
+                  rows={rows}
+                />
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function LiveFeed({ liveChanges, liveMinutes, onMinutesChange, drivers, devices, driverChanges, rows }) {
-  // Split changes into assigned vs unassigned
   var assignedChanges = [];
   var unassignedChanges = [];
+  var switchChanges = [];
 
   liveChanges.forEach(function (change) {
-    var isUnknownDriver = change.driver.id === "UnknownDriverId";
-    var isAssign = !isUnknownDriver && change.device && change.device.id && change.device.id !== "NoDeviceId";
-    if (isAssign) {
+    var type = classifyChange(change);
+    if (type === "assign") {
       assignedChanges.push(change);
+    } else if (type === "switch") {
+      switchChanges.push(change);
     } else {
       unassignedChanges.push(change);
     }
@@ -127,70 +220,60 @@ export default function LiveFeed({ liveChanges, liveMinutes, onMinutesChange, dr
         </div>
       </div>
       <div className="dad-live-body">
-        {/* Assigned Column */}
-        <div className="dad-live-column dad-live-column-assigned">
-          <div className="dad-live-column-header dad-live-col-header-assigned">
+        <FeedColumn
+          title="Assigned"
+          headerClass="dad-live-col-header-assigned"
+          icon={
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M22 11.08V12a10 10 0 11-5.93-9.14"/>
               <polyline points="22 4 12 14.01 9 11.01"/>
             </svg>
-            <span>Assigned</span>
-            <span className="dad-live-column-count">{assignedChanges.length}</span>
-          </div>
-          <div className="dad-live-column-body">
-            {assignedChanges.length === 0 ? (
-              <div className="dad-live-empty">No assigned activity</div>
-            ) : (
-              <div className="dad-live-feed">
-                {assignedChanges.map(function (change, idx) {
-                  return (
-                    <FeedItem
-                      key={change.id || ("a-" + idx)}
-                      change={change}
-                      drivers={drivers}
-                      devices={devices}
-                      driverChanges={driverChanges}
-                      rows={rows}
-                    />
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Unassigned Column */}
-        <div className="dad-live-column dad-live-column-unassigned">
-          <div className="dad-live-column-header dad-live-col-header-unassigned">
+          }
+          changes={assignedChanges}
+          emptyText="No assigned activity"
+          drivers={drivers}
+          devices={devices}
+          driverChanges={driverChanges}
+          rows={rows}
+          keyPrefix="a"
+        />
+        <FeedColumn
+          title="Unassigned"
+          headerClass="dad-live-col-header-unassigned"
+          icon={
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2">
               <circle cx="12" cy="12" r="10"/>
               <line x1="15" y1="9" x2="9" y2="15"/>
               <line x1="9" y1="9" x2="15" y2="15"/>
             </svg>
-            <span>Unassigned</span>
-            <span className="dad-live-column-count">{unassignedChanges.length}</span>
-          </div>
-          <div className="dad-live-column-body">
-            {unassignedChanges.length === 0 ? (
-              <div className="dad-live-empty">No unassigned activity</div>
-            ) : (
-              <div className="dad-live-feed">
-                {unassignedChanges.map(function (change, idx) {
-                  return (
-                    <FeedItem
-                      key={change.id || ("u-" + idx)}
-                      change={change}
-                      drivers={drivers}
-                      devices={devices}
-                      driverChanges={driverChanges}
-                      rows={rows}
-                    />
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        </div>
+          }
+          changes={unassignedChanges}
+          emptyText="No unassigned activity"
+          drivers={drivers}
+          devices={devices}
+          driverChanges={driverChanges}
+          rows={rows}
+          keyPrefix="u"
+        />
+        <FeedColumn
+          title="Driver Switch"
+          headerClass="dad-live-col-header-switch"
+          icon={
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2">
+              <polyline points="17 1 21 5 17 9"/>
+              <path d="M3 11V9a4 4 0 014-4h14"/>
+              <polyline points="7 23 3 19 7 15"/>
+              <path d="M21 13v2a4 4 0 01-4 4H3"/>
+            </svg>
+          }
+          changes={switchChanges}
+          emptyText="No driver switches"
+          drivers={drivers}
+          devices={devices}
+          driverChanges={driverChanges}
+          rows={rows}
+          keyPrefix="s"
+        />
       </div>
     </div>
   );

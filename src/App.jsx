@@ -44,6 +44,7 @@ export default function App({ apiRef }) {
   // ── Refs ──
   const liveTimerRef = useRef(null);
   const mountedRef = useRef(true);
+  const prevAssignMapRef = useRef(null); // tracks driver→device assignment state for change detection
 
   // ── Data Loading ──
   const loadData = useCallback(function () {
@@ -101,6 +102,9 @@ export default function App({ apiRef }) {
   }, [apiRef]);
 
   // ── Live Activity Loading ──
+  // Uses state-comparison approach: polls DeviceStatusInfo each cycle and
+  // compares with previous snapshot to detect assignments/unassignments.
+  // This is reliable even when DriverChange API doesn't return unassignment records.
   const loadLiveActivity = useCallback(function () {
     const api = apiRef.current;
     if (!api) return;
@@ -108,38 +112,109 @@ export default function App({ apiRef }) {
     const now = new Date();
     const from = new Date(now.getTime() - liveMinutes * 60 * 1000);
 
-    api.call("Get", {
-      typeName: "DriverChange",
-      search: {
-        fromDate: from.toISOString(),
-        toDate: now.toISOString(),
-        includeOverlappedChanges: true
-      }
-    }, function (changes) {
+    api.multiCall([
+      ["Get", {
+        typeName: "DriverChange",
+        search: {
+          fromDate: from.toISOString(),
+          toDate: now.toISOString(),
+          includeOverlappedChanges: true
+        }
+      }],
+      ["Get", { typeName: "DeviceStatusInfo" }]
+    ], function (results) {
       if (!mountedRef.current) return;
-      // Client-side post-filter for overlapped entries
-      const fromTime = from.getTime();
-      const sorted = (changes || [])
+
+      var changes = results[0] || [];
+      var currentStatusInfos = results[1] || [];
+
+      // Build current assignment map: driverId → deviceId
+      var currentAssignMap = {};
+      currentStatusInfos.forEach(function (si) {
+        if (si.driver && si.driver.id && si.driver.id !== "UnknownDriverId" &&
+            si.device && si.device.id && si.device.id !== "NoDeviceId") {
+          currentAssignMap[si.driver.id] = si.device.id;
+        }
+      });
+
+      // Detect state changes by comparing with previous snapshot
+      var detectedEvents = [];
+      var prevMap = prevAssignMapRef.current;
+      if (prevMap) {
+        var nowISO = new Date().toISOString();
+
+        // Check for unassignments: driver was in prevMap but not in currentAssignMap
+        Object.keys(prevMap).forEach(function (driverId) {
+          if (!currentAssignMap[driverId]) {
+            detectedEvents.push({
+              id: "detected-unassign-" + driverId + "-" + Date.now(),
+              dateTime: nowISO,
+              driver: { id: driverId },
+              device: { id: "NoDeviceId" },
+              _detectedType: "unassign",
+              _previousDeviceId: prevMap[driverId]
+            });
+          }
+        });
+
+        // Check for new assignments: driver in currentAssignMap but not in prevMap
+        Object.keys(currentAssignMap).forEach(function (driverId) {
+          if (!prevMap[driverId]) {
+            detectedEvents.push({
+              id: "detected-assign-" + driverId + "-" + Date.now(),
+              dateTime: nowISO,
+              driver: { id: driverId },
+              device: { id: currentAssignMap[driverId] },
+              _detectedType: "assign"
+            });
+          }
+        });
+
+        // Check for driver switches: driver in both but different device
+        Object.keys(currentAssignMap).forEach(function (driverId) {
+          if (prevMap[driverId] && prevMap[driverId] !== currentAssignMap[driverId]) {
+            detectedEvents.push({
+              id: "detected-switch-" + driverId + "-" + Date.now(),
+              dateTime: nowISO,
+              driver: { id: driverId },
+              device: { id: currentAssignMap[driverId] },
+              _detectedType: "switch",
+              _previousDeviceId: prevMap[driverId]
+            });
+          }
+        });
+      }
+
+      // Update snapshot for next cycle
+      prevAssignMapRef.current = currentAssignMap;
+
+      // Process DriverChange records (existing approach)
+      var fromTime = from.getTime();
+      var apiEvents = changes
         .filter(function (c) { return new Date(c.dateTime).getTime() >= fromTime; })
         .filter(function (c) {
-          // Keep driver-side records (both assign and unassign via NoDeviceId)
           if (c.driver && c.driver.id && c.driver.id !== "UnknownDriverId") return true;
-          // Keep vehicle-side unassignment records (UnknownDriverId + real device)
-          if (c.driver && c.driver.id === "UnknownDriverId" && c.device && c.device.id && c.device.id !== "NoDeviceId") return true;
           return false;
-        })
-        .sort(function (a, b) { return new Date(b.dateTime) - new Date(a.dateTime); });
-      // Deduplicate: prefer driver-side over vehicle-side for same device+time
+        });
+
+      // Merge: detected events + API events, deduplicate by driverId+type within 5 seconds
+      var allEvents = detectedEvents.concat(apiEvents);
       var seen = {};
-      var deduped = sorted.filter(function (c) {
-        var key = c.device.id + "_" + Math.round(new Date(c.dateTime).getTime() / 2000);
-        if (c.driver.id === "UnknownDriverId") {
-          if (seen[key]) return false;
-        }
+      var deduped = allEvents.filter(function (c) {
+        var dId = c.driver.id;
+        var devId = c.device.id;
+        var isAssign = devId && devId !== "NoDeviceId";
+        var key = dId + "_" + (isAssign ? "assign" : "unassign") + "_" + Math.round(new Date(c.dateTime).getTime() / 5000);
+        if (seen[key]) return false;
         seen[key] = true;
         return true;
       });
+
+      deduped.sort(function (a, b) { return new Date(b.dateTime) - new Date(a.dateTime); });
       setLiveChanges(deduped);
+
+      // Also update statusInfos so stats row reflects current state
+      setStatusInfos(currentStatusInfos);
     }, function () {
       if (!mountedRef.current) return;
       setLiveChanges([]);
